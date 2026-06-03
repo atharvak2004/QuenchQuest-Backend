@@ -10,7 +10,8 @@ from django.contrib.auth.hashers import make_password, check_password
 
 from .models import User
 from .serializers import UserSerializer
-
+from .models import *
+from contact.models import *
 
 # REGISTER API
 class RegisterAPI(APIView):
@@ -165,7 +166,9 @@ class LoginAPI(APIView):
 
             if not check_password(password, user.password):
                 return Response(
-                    {    "message": "The email address or password you entered is incorrect."},
+                    {
+                        "message": "The email address or password you entered is incorrect."
+                    },
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
@@ -177,17 +180,28 @@ class LoginAPI(APIView):
 
             return Response(
                 {
-                    "message": "Login successful."
+                    "message": "Login successful.",
+                    "user": {
+                        "id": user.id,
+                        "volunteer_id": user.volunteer_id,
+                        "name": user.name,
+                        "email": user.email,
+                        "phone": user.phone,
+                        "location": user.location,
+                        "skills": user.skills,
+                        "availability": user.availability,
+                        "is_verified": user.is_verified
+                    }
                 },
                 status=status.HTTP_200_OK
             )
 
         except User.DoesNotExist:
             return Response(
-                {"message": "Invalid credentials."},
+                {"message": "User not found."},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
+        
 
 # FORGOT PASSWORD API
 class ForgotPasswordAPI(APIView):
@@ -277,3 +291,20 @@ class ResetPasswordAPI(APIView):
                 {"message": "User not found."},
                 status=status.HTTP_404_NOT_FOUND
             )
+        
+
+
+class DashboardAPI(APIView):
+
+    def get(self, request):
+
+        total_volunteers = User.objects.count()
+        total_inquiries = Contact.objects.count()
+
+        return Response(
+            {
+                "total_volunteers": total_volunteers,
+                "total_inquiries": total_inquiries
+            },
+            status=status.HTTP_200_OK
+        )

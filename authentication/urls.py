@@ -7,5 +7,6 @@ urlpatterns = [
     path("login/", LoginAPI.as_view()),
     path("forgot-password/", ForgotPasswordAPI.as_view()),
     path("reset-password/", ResetPasswordAPI.as_view()),
+    path("dashboard/", DashboardAPI.as_view(), name="dashboard"),
 
 ]
