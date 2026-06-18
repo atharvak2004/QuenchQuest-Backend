@@ -25,7 +25,11 @@ SECRET_KEY = 'django-insecure-c5hh-f2ui)qcfs5fg724d12bxy1wm36-dz%#x@usfcnq-^l)w(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['192.168.1.52']
+ALLOWED_HOSTS = [
+    '127.0.0.1',
+    'localhost',
+    '192.168.1.41',
+]
 CORS_ALLOW_ALL_ORIGINS = True
 
 
@@ -40,9 +44,44 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',
     'contact',
+    'rest_framework',
     'authentication',
     'website',
+    'drf_spectacular',
+    'dashboard',
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Contact Project API',
+    'DESCRIPTION': 'API Documentation for Contact Project',
+    'VERSION': '1.0.0',
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Contact Project API",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+
+    "SECURITY": [
+        {
+            "BearerAuth": []
+        }
+    ],
+
+    "COMPONENTS": {
+        "securitySchemes": {
+            "BearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+            }
+        }
+    },
+}
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -78,17 +117,22 @@ WSGI_APPLICATION = 'project.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'contact_db',
-        'USER':'root',
-        'PASSWORD':'root',
-        'HOST':'127.0.0.1',
-        'PORT':'3308',
-        'OPTIONS':{
-            'init_command':"SET sql_mode='STRICT_TRANS_TABLES'",
-        }, 
+        'ENGINE': os.getenv('ENGINE'),
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': os.getenv('DB_PORT'),
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
     }
 }
 
@@ -145,3 +189,26 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = "pratikshayamgar6216@gmail.com"
 
 EMAIL_HOST_PASSWORD = "punqukcpbcapbqjo"
+
+# AUTH_USER_MODEL = "authentication.SisUser"
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "QuenchQuest API",
+    "VERSION": "1.0.0",
+
+    "SECURITY": [
+        {
+            "BearerAuth": []
+        }
+    ],
+
+    "COMPONENTS": {
+        "securitySchemes": {
+            "BearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+            }
+        }
+    },
+}

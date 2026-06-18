@@ -22,3 +22,14 @@ class ProgramCardSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class UserSearchSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    email = serializers.EmailField()
+    volunteer_id = serializers.CharField()
+
+
+class UserSearchResponseSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    returned = serializers.IntegerField()
+    results = UserSearchSerializer(many=True)

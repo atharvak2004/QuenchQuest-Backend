@@ -1,32 +1,63 @@
 import random
-
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-
+from datetime import datetime, date
 from django.core.mail import send_mail
 from django.conf import settings
 from django.contrib.auth.hashers import make_password, check_password
 
 from .models import User
-from .serializers import UserSerializer
+from .serializers import *
 from .models import *
 from contact.models import *
+from drf_spectacular.utils import extend_schema
+from .utils import generate_token
+from .jwt_auth import *
+
+from rest_framework import generics
+from .models import SisUser
+from .serializers import SisUserSerializer
+from .permissions import IsAdminUserRole
+from drf_spectacular.utils import extend_schema
+from rest_framework.permissions import IsAuthenticated
+from .permissions import IsEmployeeOrAdmin, IsSisAdmin
+from .permissions import *
+
+
+import jwt
+from datetime import datetime, timedelta
+from django.contrib.auth import authenticate
+from rest_framework.generics import DestroyAPIView
+from .sisuser_jwt_auth import SisUserJWTAuthentication
+from .permissions import IsSisAdmin
+from django.contrib.auth.hashers import check_password
+from rest_framework.generics import DestroyAPIView
+from django.http import Http404
+from .serializers import ProfileSerializer
+
+
+
+
 
 # REGISTER API
 class RegisterAPI(APIView):
-
+    @extend_schema(summary="User Registration",
+    description="Create a new user account with the provided registration details.",
+    request=RegisterSerializer,
+responses=MessageResponseSerializer)
     def post(self, request):
 
         name = request.data.get("name")
         email = request.data.get("email")
+        gender = request.data.get("gender")
         phone = request.data.get("phone")
         skills = request.data.get("skills")
         location = request.data.get("location")
         availability = request.data.get("availability")
         password = request.data.get("password")
 
-        if not name or not email or not phone or not skills or not password:
+        if not name or not email or not gender or not phone or not skills or not password:
           return Response(
         {"message": "All required fields are mandatory."},
         status=status.HTTP_400_BAD_REQUEST
@@ -38,7 +69,7 @@ class RegisterAPI(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        serializer = UserSerializer(data=request.data)
+        serializer = RegisterSerializer(data=request.data)
 
         if serializer.is_valid():
 
@@ -46,6 +77,7 @@ class RegisterAPI(APIView):
 
             user = serializer.save(
                 password=make_password(password),
+                gender=gender,
                 phone=phone,
                 skills=skills,
                 location=location,
@@ -88,6 +120,12 @@ QuenchQuest Team
 
 # VERIFY OTP API
 class VerifyOTPAPI(APIView):
+    @extend_schema(
+    summary="Verify OTP",
+    description="Verify user OTP.",
+    request=VerifyOTPSerializer,
+    responses=MessageResponseSerializer
+)
 
     def post(self, request):
 
@@ -110,33 +148,33 @@ class VerifyOTPAPI(APIView):
                 )
 
             user.is_verified = True
-            user.otp = None
-            user.save()
 
+            # REMOVE THIS LINE
+            # user.otp = None
+
+            user.save()
             send_mail(
-                "Welcome to QuenchQuest",
-                f"""
+        subject="Welcome to QuenchQuest",
+        message=f"""
 Hello {user.name},
+
+Welcome to QuenchQuest!
 
 Your account has been successfully verified.
 
-Welcome to QuenchQuest.
+Volunteer ID: {user.volunteer_id}
 
-Your Volunteer ID is:{user.volunteer_id}
+Thank you for joining us and contributing to our mission.
 
-Regards,
-QuenchQuest Team
+Team QuenchQuest
 """,
-                settings.EMAIL_HOST_USER,
-                [user.email],
-                fail_silently=False
-            )
+        from_email=settings.EMAIL_HOST_USER,
+        recipient_list=[user.email],
+        fail_silently=False,
+    )
 
             return Response(
-                {
-                    "message": "Account verified successfully.",
-                    "volunteer_id": user.volunteer_id
-                },
+                {"message": "OTP verified successfully."},
                 status=status.HTTP_200_OK
             )
 
@@ -146,9 +184,13 @@ QuenchQuest Team
                 status=status.HTTP_404_NOT_FOUND
             )
 
-
 # LOGIN API
 class LoginAPI(APIView):
+    @extend_schema(
+    summary="User Login",
+    description="Authenticate user.",
+    request=LoginSerializer,
+    responses=RegisterSerializer)
 
     def post(self, request):
 
@@ -177,21 +219,21 @@ class LoginAPI(APIView):
                     {"message": "Please verify your email first."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-
+            token = generate_token(user)
             return Response(
                 {
                     "message": "Login successful.",
                     "user": {
-                        "id": user.id,
-                        "volunteer_id": user.volunteer_id,
-                        "name": user.name,
-                        "email": user.email,
-                        "phone": user.phone,
-                        "location": user.location,
-                        "skills": user.skills,
-                        "availability": user.availability,
-                        "is_verified": user.is_verified
-                    }
+                         "name": user.name,
+                         "email": user.email,
+                         "phone": user.phone,
+                         "gender": user.gender,
+                         "skills": user.skills,
+                         "location": user.location,
+                         "availability": user.availability,
+        },
+                    "token": token,
+                    
                 },
                 status=status.HTTP_200_OK
             )
@@ -205,6 +247,11 @@ class LoginAPI(APIView):
 
 # FORGOT PASSWORD API
 class ForgotPasswordAPI(APIView):
+    @extend_schema(
+    summary="Forgot Password",
+    request=ForgotPasswordSerializer,
+    responses=MessageResponseSerializer
+)
 
     def post(self, request):
 
@@ -255,6 +302,11 @@ QuenchQuest Team
 
 # RESET PASSWORD API
 class ResetPasswordAPI(APIView):
+    @extend_schema(
+    summary="Reset Password",
+    request=ResetPasswordSerializer,
+    responses=MessageResponseSerializer
+)
 
     def post(self, request):
 
@@ -291,20 +343,154 @@ class ResetPasswordAPI(APIView):
                 {"message": "User not found."},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
 
 
-class DashboardAPI(APIView):
+# CREATE USER (ADMIN CREATION OR SETUP)
+@extend_schema(summary="Create SisUser",
+    description="Create a new Employee or Admin account.")
+class SisUserCreateAPIView(generics.CreateAPIView):
+    queryset = SisUser.objects.all()
+    serializer_class = SisUserSerializer
 
-    def get(self, request):
 
-        total_volunteers = User.objects.count()
-        total_inquiries = Contact.objects.count()
+# LIST USERS (ADMIN ONLY)
+@extend_schema(summary="List SisUsers",
+    description="Retrieve all Employee and Admin accounts.")
+class SisUserListAPIView(generics.ListAPIView):
+    queryset = SisUser.objects.all()
+    serializer_class = SisUserSerializer
+    authentication_classes = []
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+
+class SisUserLoginAPIView(APIView):
+
+    @extend_schema(
+        summary="SisUser Login",
+        request=SisUserLoginSerializer,
+        description="Authenticate Admin or Employee and return JWT token."
+    )
+    def post(self, request):
+
+        serializer = SisUserLoginSerializer(data=request.data)
+
+        if serializer.is_valid():
+
+            username = serializer.validated_data["username"]
+            password = serializer.validated_data["password"]
+
+            try:
+                user = SisUser.objects.get(username=username)
+
+            except SisUser.DoesNotExist:
+                return Response(
+                    {"error": "Invalid credentials"},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            if not check_password(password, user.password):
+                return Response(
+                    {"error": "Invalid credentials"},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            payload = {
+                "sisuser_id": user.id,
+                "username": user.username,
+                "role": user.choice,
+                "exp": datetime.utcnow() + timedelta(days=1)
+            }
+
+            token = jwt.encode(
+                payload,
+                settings.SECRET_KEY,
+                algorithm="HS256"
+            )
+
+            return Response({
+                "token": token,
+                "role": user.choice,
+                "username": user.username
+            })
 
         return Response(
-            {
-                "total_volunteers": total_volunteers,
-                "total_inquiries": total_inquiries
-            },
-            status=status.HTTP_200_OK
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
         )
+@extend_schema(
+    auth=[{"BearerAuth": []}]
+)
+@extend_schema(summary="Delete Employee",
+    description="Allows Admin users to delete employee accounts.")
+class DeleteEmployeeAPIView(DestroyAPIView):
+
+    queryset = SisUser.objects.filter(choice="employee_role")   
+    authentication_classes = [SisUserJWTAuthentication]
+    permission_classes = [IsSisAdmin]
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            employee = self.get_object()
+
+            self.perform_destroy(employee)
+
+            return Response(
+                {"message": "User deleted successfully."},
+                status=status.HTTP_200_OK
+            )
+
+        except Http404:
+            return Response(
+                {"error": "Employee not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+class DashboardAPIView(APIView):
+
+    authentication_classes = [SisUserJWTAuthentication]
+    permission_classes = [IsEmployeeOrAdmin]
+
+    @extend_schema(
+        summary="Dashboard Access",
+        description="Admin and Employee can access dashboard"
+    )
+    def get(self, request):
+
+        return Response({
+            "message": "Dashboard Access Granted",
+            "user": request.user.username,
+            "role": request.user.choice
+        })
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .sisuser_jwt_auth import SisUserJWTAuthentication
+from .permissions import IsEmployeeOrAdmin  # or allow both roles
+
+from .serializers import ProfileSerializer
+
+
+class ProfileAPIView(APIView):
+    authentication_classes = [SisUserJWTAuthentication]
+    permission_classes = [IsEmployeeOrAdmin]  # OR IsAuthenticated if you want simple
+
+    def get(self, request):
+        serializer = ProfileSerializer(request.user)
+        return Response(serializer.data)
+
+    def patch(self, request):
+        serializer = ProfileSerializer(
+            request.user,
+            data=request.data,
+            partial=True
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "message": "Profile updated successfully",
+                "data": serializer.data
+            })
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

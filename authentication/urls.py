@@ -7,6 +7,12 @@ urlpatterns = [
     path("login/", LoginAPI.as_view()),
     path("forgot-password/", ForgotPasswordAPI.as_view()),
     path("reset-password/", ResetPasswordAPI.as_view()),
-    path("dashboard/", DashboardAPI.as_view(), name="dashboard"),
+    path("sisuser/create/", SisUserCreateAPIView.as_view()),
+    path("sisuser/list/", SisUserListAPIView.as_view()),
+    path("sisuser/login/",SisUserLoginAPIView.as_view(),name="sisuser-login"),
+    path("dashboard/", DashboardAPIView.as_view()),
+    path("employee/delete/<int:pk>/", DeleteEmployeeAPIView.as_view()), 
+    path("profile/", ProfileAPIView.as_view(), name="profile"),
 
 ]
+

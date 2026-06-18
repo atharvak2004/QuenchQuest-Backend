@@ -4,9 +4,14 @@ from rest_framework import status
 
 from authentication.models import User
 from .models import Contact
+from .serializers import ContactSerializer
+from drf_spectacular.utils import extend_schema
 
 
 class ContactAPI(APIView):
+    @extend_schema(summary="Submit Contact Form",
+    description="Allows registered and guest users to send contact inquiries.",
+    request=ContactSerializer,responses=ContactSerializer)
 
     def post(self, request):
 
@@ -21,6 +26,7 @@ class ContactAPI(APIView):
             )
 
         # CASE 1: Logged-in user
+   
         if user_id:
 
             try:
