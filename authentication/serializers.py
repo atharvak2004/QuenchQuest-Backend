@@ -87,3 +87,57 @@ class ProfileSerializer(serializers.ModelSerializer):
             "choice"  # role (admin/employee)
         ]
         read_only_fields = ["id", "choice"]
+
+
+#  for swagger serializers
+
+class ProfileUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SisUser
+        fields = [
+            "username",
+            "email",
+            "phone",
+            "location"
+        ]        
+
+class ProfileResponseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SisUser
+        fields = [
+            "id",
+            "username",
+            "email",
+            "phone",
+            "location",
+            "choice"
+        ]        
+
+class SisUserCreateRequestSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    email = serializers.EmailField()
+    phone = serializers.CharField()
+    location = serializers.CharField()
+    password = serializers.CharField()
+    choice = serializers.CharField()        
+
+class SisUserCreateResponseSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    username = serializers.CharField()
+    email = serializers.EmailField()
+    phone = serializers.CharField()
+    location = serializers.CharField()
+    choice = serializers.CharField()
+
+class SisUserLoginResponseSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    role = serializers.CharField()
+    username = serializers.CharField()    
+
+class DashboardResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
+    user = serializers.CharField()
+    role = serializers.CharField()
+
+class MessageResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()        

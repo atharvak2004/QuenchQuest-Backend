@@ -20,8 +20,28 @@ class UserListSerializer(serializers.ModelSerializer):
             "created_at",
         ]
 
+class CreateVolunteerSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    email = serializers.EmailField()
+    phone = serializers.CharField()
+    gender = serializers.CharField()
+    skills = serializers.CharField()
+    location = serializers.CharField(required=False, allow_blank=True)
+    availability = serializers.CharField(required=False, allow_blank=True)
 
-
+class VolunteerUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            "name",
+            "email",
+            "phone",
+            "gender",
+            "skills",
+            "location",
+            "availability",
+            "is_verified"
+        ]
 
 
 # class CampaignSerializer(serializers.ModelSerializer):

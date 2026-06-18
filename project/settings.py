@@ -53,24 +53,17 @@ INSTALLED_APPS = [
 
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-}
-
-SPECTACULAR_SETTINGS = {
-    'TITLE': 'Contact Project API',
-    'DESCRIPTION': 'API Documentation for Contact Project',
-    'VERSION': '1.0.0',
-}
-
-SPECTACULAR_SETTINGS = {
-    "TITLE": "Contact Project API",
-    "VERSION": "1.0.0",
-    "SERVE_INCLUDE_SCHEMA": False,
-
-    "SECURITY": [
-        {
-            "BearerAuth": []
-        }
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'authentication.sisuser_jwt_auth.SisUserJWTAuthentication',
     ],
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "QuenchQuest API",
+    "DESCRIPTION": "Backend APIs with JWT authentication",
+    "VERSION": "1.0.0",
+
+    "SECURITY": [{"BearerAuth": []}],
 
     "COMPONENTS": {
         "securitySchemes": {
@@ -81,6 +74,11 @@ SPECTACULAR_SETTINGS = {
             }
         }
     },
+
+    "SWAGGER_UI_SETTINGS": {
+        "persistAuthorization": True
+    }
+    
 }
 
 MIDDLEWARE = [

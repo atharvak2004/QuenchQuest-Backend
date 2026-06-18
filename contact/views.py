@@ -21,7 +21,7 @@ class ContactAPI(APIView):
         # message is ALWAYS required
         if not message:
             return Response(
-                {"message": "Message is required."},
+                {"Error": "Message is required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -44,7 +44,7 @@ class ContactAPI(APIView):
 
             except User.DoesNotExist:
                 return Response(
-                    {"message": "You are not registered. Please register first."},
+                    {"Error": "You are not registered. Please register first."},
                     status=status.HTTP_404_NOT_FOUND
                 )
 
@@ -58,7 +58,7 @@ class ContactAPI(APIView):
 
             if not all([name, contact, email, address]):
                 return Response(
-                    {"message": "All fields are required."},
+                    {"Error": "All fields are required."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 

@@ -35,7 +35,13 @@ from django.contrib.auth.hashers import check_password
 from rest_framework.generics import DestroyAPIView
 from django.http import Http404
 from .serializers import ProfileSerializer
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .sisuser_jwt_auth import SisUserJWTAuthentication
+from .permissions import IsEmployeeOrAdmin  # or allow both roles
 
+from .serializers import ProfileSerializer
 
 
 
@@ -59,13 +65,13 @@ responses=MessageResponseSerializer)
 
         if not name or not email or not gender or not phone or not skills or not password:
           return Response(
-        {"message": "All required fields are mandatory."},
+        {"Error": "All required fields are mandatory."},
         status=status.HTTP_400_BAD_REQUEST
     )
 
         if User.objects.filter(email=email).exists():
             return Response(
-                {"message": "Email already registered."},
+                {"Error": "Email already registered."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -124,9 +130,7 @@ class VerifyOTPAPI(APIView):
     summary="Verify OTP",
     description="Verify user OTP.",
     request=VerifyOTPSerializer,
-    responses=MessageResponseSerializer
-)
-
+    responses=MessageResponseSerializer)
     def post(self, request):
 
         email = request.data.get("email")
@@ -134,7 +138,7 @@ class VerifyOTPAPI(APIView):
 
         if not email or not otp:
             return Response(
-                {"message": "All fields are required."},
+                {"Error": "All fields are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -143,7 +147,7 @@ class VerifyOTPAPI(APIView):
 
             if user.otp != otp:
                 return Response(
-                    {"message": "Invalid OTP."},
+                    {"Error": "Invalid OTP."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
@@ -180,7 +184,7 @@ Team QuenchQuest
 
         except User.DoesNotExist:
             return Response(
-                {"message": "User not found."},
+                {"Error": "User not found."},
                 status=status.HTTP_404_NOT_FOUND
             )
 
@@ -199,7 +203,7 @@ class LoginAPI(APIView):
 
         if not email or not password:
             return Response(
-                {"message": "All fields are required."},
+                {"Error": "All fields are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -209,14 +213,14 @@ class LoginAPI(APIView):
             if not check_password(password, user.password):
                 return Response(
                     {
-                        "message": "The email address or password you entered is incorrect."
+                        "Error": "The email address or password you entered is incorrect."
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
             if not user.is_verified:
                 return Response(
-                    {"message": "Please verify your email first."},
+                    {"Error": "Please verify your email first."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             token = generate_token(user)
@@ -240,7 +244,7 @@ class LoginAPI(APIView):
 
         except User.DoesNotExist:
             return Response(
-                {"message": "User not found."},
+                {"Error": "User not found."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -259,7 +263,7 @@ class ForgotPasswordAPI(APIView):
 
         if not email:
             return Response(
-                {"message": "Email is required."},
+                {"Error": "Email is required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -295,7 +299,7 @@ QuenchQuest Team
 
         except User.DoesNotExist:
             return Response(
-                {"message": "User not found."},
+                {"Error": "User not found."},
                 status=status.HTTP_404_NOT_FOUND
             )
 
@@ -316,7 +320,7 @@ class ResetPasswordAPI(APIView):
 
         if not email or not otp or not new_password:
             return Response(
-                {"message": "All fields are required."},
+                {"Error": "All fields are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -325,7 +329,7 @@ class ResetPasswordAPI(APIView):
 
             if user.otp != otp:
                 return Response(
-                    {"message": "Invalid OTP."},
+                    {"Error": "Invalid OTP."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
@@ -340,22 +344,26 @@ class ResetPasswordAPI(APIView):
 
         except User.DoesNotExist:
             return Response(
-                {"message": "User not found."},
+                {"Error": "User not found."},
                 status=status.HTTP_404_NOT_FOUND
             )
 
 
-# CREATE USER (ADMIN CREATION OR SETUP)
-@extend_schema(summary="Create SisUser",
-    description="Create a new Employee or Admin account.")
+@extend_schema(
+    summary="Create SisUser",
+    description="Create a new Employee or Admin account.",
+    request=SisUserCreateRequestSerializer,
+    responses=SisUserCreateResponseSerializer)
 class SisUserCreateAPIView(generics.CreateAPIView):
     queryset = SisUser.objects.all()
     serializer_class = SisUserSerializer
 
 
 # LIST USERS (ADMIN ONLY)
-@extend_schema(summary="List SisUsers",
-    description="Retrieve all Employee and Admin accounts.")
+@extend_schema(
+    summary="List SisUsers",
+    description="Retrieve all Employee and Admin accounts.",
+    responses=SisUserCreateResponseSerializer)
 class SisUserListAPIView(generics.ListAPIView):
     queryset = SisUser.objects.all()
     serializer_class = SisUserSerializer
@@ -366,10 +374,10 @@ class SisUserListAPIView(generics.ListAPIView):
 class SisUserLoginAPIView(APIView):
 
     @extend_schema(
-        summary="SisUser Login",
-        request=SisUserLoginSerializer,
-        description="Authenticate Admin or Employee and return JWT token."
-    )
+    summary="SisUser Login",
+    description="Authenticate Admin or Employee and return JWT token.",
+    request=SisUserLoginSerializer,
+    responses=SisUserLoginResponseSerializer)
     def post(self, request):
 
         serializer = SisUserLoginSerializer(data=request.data)
@@ -384,13 +392,13 @@ class SisUserLoginAPIView(APIView):
 
             except SisUser.DoesNotExist:
                 return Response(
-                    {"error": "Invalid credentials"},
+                    {"Error": "Invalid username or password."},
                     status=status.HTTP_401_UNAUTHORIZED
                 )
 
             if not check_password(password, user.password):
                 return Response(
-                    {"error": "Invalid credentials"},
+                    {"Error": "Invalid password."},
                     status=status.HTTP_401_UNAUTHORIZED
                 )
 
@@ -418,10 +426,10 @@ class SisUserLoginAPIView(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 @extend_schema(
-    auth=[{"BearerAuth": []}]
-)
-@extend_schema(summary="Delete Employee",
-    description="Allows Admin users to delete employee accounts.")
+    summary="Delete Employee",
+    description="Allows Admin users to delete employee accounts.",
+    responses=MessageResponseSerializer,
+    auth=[{"BearerAuth": []}])
 class DeleteEmployeeAPIView(DestroyAPIView):
 
     queryset = SisUser.objects.filter(choice="employee_role")   
@@ -441,7 +449,7 @@ class DeleteEmployeeAPIView(DestroyAPIView):
 
         except Http404:
             return Response(
-                {"error": "Employee not found."},
+                {"Error": "Employee not found."},
                 status=status.HTTP_404_NOT_FOUND
             )
 
@@ -451,9 +459,9 @@ class DashboardAPIView(APIView):
     permission_classes = [IsEmployeeOrAdmin]
 
     @extend_schema(
-        summary="Dashboard Access",
-        description="Admin and Employee can access dashboard"
-    )
+    summary="Dashboard Access",
+    description="Admin and Employee can access dashboard",
+    responses=DashboardResponseSerializer)
     def get(self, request):
 
         return Response({
@@ -462,23 +470,26 @@ class DashboardAPIView(APIView):
             "role": request.user.choice
         })
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from .sisuser_jwt_auth import SisUserJWTAuthentication
-from .permissions import IsEmployeeOrAdmin  # or allow both roles
-
-from .serializers import ProfileSerializer
 
 
 class ProfileAPIView(APIView):
     authentication_classes = [SisUserJWTAuthentication]
     permission_classes = [IsEmployeeOrAdmin]  # OR IsAuthenticated if you want simple
-
+    @extend_schema(
+        summary="Get Profile",
+        description="Retrieve logged-in user profile",
+        responses=ProfileResponseSerializer)
     def get(self, request):
         serializer = ProfileSerializer(request.user)
         return Response(serializer.data)
-
+    
+    @extend_schema(
+        summary="Update Profile",
+        description="Update logged-in user profile (partial update allowed)",
+        request=ProfileUpdateSerializer,     # for swagger
+        responses={
+            200: ProfileResponseSerializer    # for swagger       
+        })
     def patch(self, request):
         serializer = ProfileSerializer(
             request.user,

@@ -1,4 +1,3 @@
-
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -18,6 +17,9 @@ from authentication.sisuser_jwt_auth import SisUserJWTAuthentication
 from .pagination import VolunteerPagination
 from rest_framework.permissions import IsAuthenticated
 from authentication.permissions import IsEmployeeOrAdmin
+from django.contrib.auth.hashers import make_password
+from .serializers import VolunteerUpdateSerializer
+
 
 # Create your views here.
 class VolunteerAPI(APIView):
@@ -26,7 +28,9 @@ class VolunteerAPI(APIView):
 
     @extend_schema(
         summary="Get Volunteer Data",
-        description="Retrieve Volunteer statistics."
+        operation_id="volunteer_list",
+        description="Retrieve Volunteer statistics.",
+        responses=UserListSerializer
     )
     def get(self, request):
 
@@ -34,6 +38,8 @@ class VolunteerAPI(APIView):
         total_volunteers = User.objects.count()
         verified_users = User.objects.filter(is_verified=True).count()
         unverified_users = User.objects.filter(is_verified=False).count()
+        male_volunteers = User.objects.filter(gender__iexact="male").count()
+        female_volunteers = User.objects.filter(gender__iexact="female").count()
 
         today = date.today()
         new_users_today = User.objects.filter(
@@ -77,6 +83,8 @@ class VolunteerAPI(APIView):
                     "total_volunteers": total_volunteers,
                     "verified_users": verified_users,
                     "unverified_users": unverified_users,
+                    "male_volunteers": male_volunteers,
+                    "female_volunteers": female_volunteers,
                     "new_users_today": new_users_today,
                     "count": volunteers.count(),
                     "volunteers": serializer.data,
@@ -85,7 +93,6 @@ class VolunteerAPI(APIView):
             )
 
         # PAGINATION
-        # http://192.168.1.41:8000/api/dashboard/volunteers/?page=6
         volunteers = volunteers.order_by("-id")
 
         paginator = VolunteerPagination()
@@ -104,8 +111,9 @@ class VolunteerAPI(APIView):
                 "total_volunteers": total_volunteers,
                 "verified_users": verified_users,
                 "unverified_users": unverified_users,
+                "male_volunteers": male_volunteers,
+                "female_volunteers": female_volunteers,
                 "new_users_today": new_users_today,
-                # "recent_users": recent_users_data,
                 "volunteers": serializer.data,
                 "pagination": {
                     "count": paginator.page.paginator.count,
@@ -115,8 +123,108 @@ class VolunteerAPI(APIView):
             },
             status=status.HTTP_200_OK
         )
-class TotalUsersAPIView(APIView):
-    @extend_schema(summary="Get Users Data", description="Retrieve Users statistics.")
+
+    @extend_schema(
+        summary="Create Volunteer",
+        operation_id="volunteer_create",
+        description="Admin can create volunteer directly.",
+        request=CreateVolunteerSerializer,
+        responses=UserListSerializer
+    )
+    def post(self, request):
+
+        name = request.data.get("name")
+        email = request.data.get("email")
+        phone = request.data.get("phone")
+        gender = request.data.get("gender")
+        skills = request.data.get("skills")
+        location = request.data.get("location")
+        availability = request.data.get("availability")
+
+        if not all([name, email, phone, gender, skills]):
+            return Response(
+                {"Error": "All required fields are mandatory."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if User.objects.filter(email=email).exists():
+            return Response(
+                {"Error": "Email already registered."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        first_name = name.split()[0].lower()
+        password = f"{first_name}{phone[:4]}"
+
+        user = User(
+            name=name,
+            email=email,
+            phone=phone,
+            gender=gender,
+            skills=skills,
+            location=location,
+            availability=availability,
+            password=make_password(password),
+            is_verified=True
+        )
+
+        user.save()
+
+        return Response(
+            {
+                "message": "Volunteer created successfully.",
+                "volunteer_id": user.volunteer_id,
+                "password": password
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+    @extend_schema(
+    summary="Update Volunteer",
+    operation_id="volunteer_update",
+    description="Admin can partially update volunteer details using volunteer ID (PATCH method).",
+    request=VolunteerUpdateSerializer,
+    responses=UserListSerializer)
+    def patch(self, request, pk):
+
+        try:
+            user = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response(
+                {"Error": "Volunteer not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = VolunteerUpdateSerializer(
+            user,
+            data=request.data,
+            partial=True
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {
+                    "message": "Volunteer updated successfully.",
+                    "volunteer": serializer.data
+                },
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            {
+                "Error": "Invalid data provided.",
+                "errors": serializer.errors
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+class TotalUsersAPI(APIView):
+    @extend_schema(
+    summary="Get Users Data",
+    description="Retrieve Users statistics.",
+    responses=UserListSerializer(many=True))
     def get(self, request):
         users = User.objects.all()
         serializer = UserListSerializer(users, many=True)
@@ -127,8 +235,7 @@ class TotalUsersAPIView(APIView):
                 "users": serializer.data
             },
             status=status.HTTP_200_OK
-        )    
-      
+        )
 
     
 # class TotalUsersAPIView(APIView):

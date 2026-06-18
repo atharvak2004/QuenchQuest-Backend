@@ -39,7 +39,7 @@ class LatestOurImpactAPI(APIView):
 
         if not impact:
             return Response(
-                {"message": "No impact data found"},
+                {"Error": "No impact data found"},
                 status=status.HTTP_404_NOT_FOUND
             )
 
