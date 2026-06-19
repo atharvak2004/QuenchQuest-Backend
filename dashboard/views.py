@@ -22,7 +22,7 @@ from .serializers import VolunteerUpdateSerializer
 
 
 # Create your views here.
-class VolunteerAPI(APIView):
+class VolunteerListCreateAPI(APIView):
     authentication_classes = [SisUserJWTAuthentication]
     permission_classes = [IsEmployeeOrAdmin]
 
@@ -179,9 +179,11 @@ class VolunteerAPI(APIView):
             status=status.HTTP_201_CREATED
         )
 
+class VolunteerUpdateAPI(APIView):
+    
     @extend_schema(
     summary="Update Volunteer",
-    operation_id="volunteer_update",
+    operation_id="volunteer_partial_update",
     description="Admin can partially update volunteer details using volunteer ID (PATCH method).",
     request=VolunteerUpdateSerializer,
     responses=UserListSerializer)

@@ -4,7 +4,6 @@ from .models import SisUser
 from django.contrib.auth import get_user_model
 
 
-
 class RegisterSerializer(serializers.Serializer):
     name = serializers.CharField()
     email = serializers.EmailField()
@@ -72,8 +71,7 @@ class SisUserLoginSerializer(serializers.Serializer):
 
 
     User = get_user_model()
-from rest_framework import serializers
-from .models import SisUser
+
 
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:

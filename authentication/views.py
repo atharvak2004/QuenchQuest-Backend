@@ -350,7 +350,7 @@ class ResetPasswordAPI(APIView):
 
 
 @extend_schema(
-    summary="Create SisUser",
+    summary="Create Employee or Admin",
     description="Create a new Employee or Admin account.",
     request=SisUserCreateRequestSerializer,
     responses=SisUserCreateResponseSerializer)
@@ -361,7 +361,7 @@ class SisUserCreateAPIView(generics.CreateAPIView):
 
 # LIST USERS (ADMIN ONLY)
 @extend_schema(
-    summary="List SisUsers",
+    summary="List Employee and Admin",
     description="Retrieve all Employee and Admin accounts.",
     responses=SisUserCreateResponseSerializer)
 class SisUserListAPIView(generics.ListAPIView):
@@ -374,7 +374,7 @@ class SisUserListAPIView(generics.ListAPIView):
 class SisUserLoginAPIView(APIView):
 
     @extend_schema(
-    summary="SisUser Login",
+    summary="admin or employee Login",
     description="Authenticate Admin or Employee and return JWT token.",
     request=SisUserLoginSerializer,
     responses=SisUserLoginResponseSerializer)

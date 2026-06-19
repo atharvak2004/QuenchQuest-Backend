@@ -11,6 +11,7 @@ from drf_spectacular.utils import extend_schema
 class ContactAPI(APIView):
     @extend_schema(summary="Submit Contact Form",
     description="Allows registered and guest users to send contact inquiries.",
+    operation_id="contact_submit",
     request=ContactSerializer,responses=ContactSerializer)
 
     def post(self, request):
@@ -74,3 +75,5 @@ class ContactAPI(APIView):
                 {"message": "Message sent successfully."},
                 status=status.HTTP_201_CREATED
             )
+        
+
