@@ -45,7 +45,6 @@ from .serializers import ProfileSerializer
 
 
 
-
 # REGISTER API
 class RegisterAPI(APIView):
     @extend_schema(summary="User Registration",
@@ -367,7 +366,7 @@ class SisUserCreateAPIView(generics.CreateAPIView):
 class SisUserListAPIView(generics.ListAPIView):
     queryset = SisUser.objects.all()
     serializer_class = SisUserSerializer
-    authentication_classes = []
+    authentication_classes = [SisUserJWTAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUserRole]
 
 

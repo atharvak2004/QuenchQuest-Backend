@@ -189,24 +189,3 @@ EMAIL_HOST_USER = "pratikshayamgar6216@gmail.com"
 EMAIL_HOST_PASSWORD = "punqukcpbcapbqjo"
 
 # AUTH_USER_MODEL = "authentication.SisUser"
-
-SPECTACULAR_SETTINGS = {
-    "TITLE": "QuenchQuest API",
-    "VERSION": "1.0.0",
-
-    "SECURITY": [
-        {
-            "BearerAuth": []
-        }
-    ],
-
-    "COMPONENTS": {
-        "securitySchemes": {
-            "BearerAuth": {
-                "type": "http",
-                "scheme": "bearer",
-                "bearerFormat": "JWT",
-            }
-        }
-    },
-}
