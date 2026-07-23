@@ -11,11 +11,15 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+from django.conf import settings
+import os
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+load_dotenv()
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -25,11 +29,19 @@ SECRET_KEY = 'django-insecure-c5hh-f2ui)qcfs5fg724d12bxy1wm36-dz%#x@usfcnq-^l)w(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+# ALLOWED_HOSTS = [
+#     '127.0.0.1',
+#         'localhost',
+#         '192.168.1.41',
+# ]
+
+
 ALLOWED_HOSTS = [
-    '127.0.0.1',
-    'localhost',
-    '192.168.1.41',
+    host.strip()
+    for host in os.getenv("ALLOWED_HOSTS", "").split(",")
+    if host.strip()
 ]
+
 CORS_ALLOW_ALL_ORIGINS = True
 
 
