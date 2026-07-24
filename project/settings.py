@@ -11,7 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
-from django.conf import settings
+# from django.conf import settings
 import os
 from dotenv import load_dotenv
 
