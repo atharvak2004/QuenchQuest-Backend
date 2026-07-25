@@ -174,7 +174,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kolkata'
 
 USE_I18N = True
 
@@ -199,8 +199,17 @@ EMAIL_PORT = 587
 
 EMAIL_USE_TLS = True
 
-EMAIL_HOST_USER = "pratikshayamgar6216@gmail.com"
+EMAIL_HOST_USER = "quenchquestsocialfoundation@gmail.com"
 
-EMAIL_HOST_PASSWORD = "punqukcpbcapbqjo"
+EMAIL_HOST_PASSWORD = "bnltbgfnvyajepje"
 
 # AUTH_USER_MODEL = "authentication.SisUser"
+
+CORS_ALLOWED_ORIGINS = [
+    "https://quenchquestsocialfoundation.org",
+]
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://quenchquestsocialfoundation.org",
+]
