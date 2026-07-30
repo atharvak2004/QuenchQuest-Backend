@@ -247,87 +247,87 @@ class TotalUsersAPI(APIView):
 #         })
 
 
-# class CampaignAPI(APIView):
+class CampaignAPI(APIView):
 
-#     authentication_classes = [JWTAuthentication]
-#     @extend_schema(
-#     summary="Get Campaigns",
-#     description="Retrieve all campaigns.",
-#     responses=CampaignSerializer)
-#     def get(self, request):
-#         campaigns = Campaign.objects.all()
-#         serializer = CampaignSerializer(campaigns, many=True)
-#         return Response(serializer.data)
-#     @extend_schema(
-#     summary="Create Campaigns",
-#     description="create a new campaign.",
-#     request=CampaignSerializer,
-#     responses=CampaignSerializer)
-#     def post(self, request):
-#         serializer = CampaignSerializer(data=request.data)
+    authentication_classes = [UserJWTAuthentication]
+    @extend_schema(
+    summary="Get Campaigns",
+    description="Retrieve all campaigns.",
+    responses=CampaignSerializer)
+    def get(self, request):
+        campaigns = Campaign.objects.all()
+        serializer = CampaignSerializer(campaigns, many=True)
+        return Response(serializer.data)
+    @extend_schema(
+    summary="Create Campaigns",
+    description="create a new campaign.",
+    request=CampaignSerializer,
+    responses=CampaignSerializer)
+    def post(self, request):
+        serializer = CampaignSerializer(data=request.data)
 
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response(serializer.data, status=201)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=201)
         
-#         return Response(serializer.errors, status=400)    
+        return Response(serializer.errors, status=400)    
     
 
-# class BeneficiaryAPI(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     @extend_schema(
-#         summary="Get Beneficiaries",
-#         description="Retrieve all beneficiaries.",
-#         responses=BeneficiarySerializer)
-#     def get(self, request):
-#         beneficiaries = Beneficiary.objects.select_related('user').all()
-#         serializer = BeneficiarySerializer(beneficiaries, many=True)
-#         return Response(serializer.data)
+class BeneficiaryAPI(APIView):
+    authentication_classes = [UserJWTAuthentication]
+    @extend_schema(
+        summary="Get Beneficiaries",
+        description="Retrieve all beneficiaries.",
+        responses=BeneficiarySerializer)
+    def get(self, request):
+        beneficiaries = Beneficiary.objects.select_related('user').all()
+        serializer = BeneficiarySerializer(beneficiaries, many=True)
+        return Response(serializer.data)
 
-#     @extend_schema(
-#         summary="Create Beneficiary",
-#         description="Create a new beneficiary linked with user.",
-#         request=BeneficiarySerializer,
-#         responses=BeneficiarySerializer)
-#     def post(self, request):
-#         data = request.data.copy()
-#         # automatically attach logged-in user
-#         data['user'] = request.user.id
-#         serializer = BeneficiarySerializer(data=data)
+    @extend_schema(
+        summary="Create Beneficiary",
+        description="Create a new beneficiary linked with user.",
+        request=BeneficiarySerializer,
+        responses=BeneficiarySerializer)
+    def post(self, request):
+        data = request.data.copy()
+        # automatically attach logged-in user
+        data['user'] = request.user.id
+        serializer = BeneficiarySerializer(data=data)
 
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response(serializer.data, status=201)
-#         return Response(serializer.errors, status=400)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=201)
+        return Response(serializer.errors, status=400)
     
        
-# class DonationAPI(APIView):
+class DonationAPI(APIView):
 
-#     authentication_classes = [JWTAuthentication]
-#     @extend_schema(
-#     summary="Get Donations",
-#     description="Retrieve all donations.",
-#     responses=DonationSerializer)
-#     def get(self, request):
-#         donations = Donation.objects.all()
-#         serializer = DonationSerializer(
-#             donations,
-#             many=True
-#         )
-#         return Response(serializer.data)
-#     @extend_schema(
-#     summary="Create Donations",
-#     description="create a new donation.",
-#     request=DonationSerializer,
-#     responses=DonationSerializer)
-#     def post(self, request):
-#         serializer = DonationSerializer(data=request.data)
+    authentication_classes = [UserJWTAuthentication]
+    @extend_schema(
+    summary="Get Donations",
+    description="Retrieve all donations.",
+    responses=DonationSerializer)
+    def get(self, request):
+        donations = Donation.objects.all()
+        serializer = DonationSerializer(
+            donations,
+            many=True
+        )
+        return Response(serializer.data)
+    @extend_schema(
+    summary="Create Donations",
+    description="create a new donation.",
+    request=DonationSerializer,
+    responses=DonationSerializer)
+    def post(self, request):
+        serializer = DonationSerializer(data=request.data)
 
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response(serializer.data, status=201)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=201)
 
-#         return Response(serializer.errors, status=400)    
+        return Response(serializer.errors, status=400)    
 
 
 # class CampaignAPI(APIView):
