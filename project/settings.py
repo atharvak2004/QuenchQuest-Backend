@@ -207,9 +207,11 @@ EMAIL_HOST_PASSWORD = "bnltbgfnvyajepje"
 
 CORS_ALLOWED_ORIGINS = [
     "https://quenchquestsocialfoundation.org",
+    "https://www.quenchquestsocialfoundation.org",
 ]
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "https://quenchquestsocialfoundation.org",
-]
+
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:5173",
+#     "http://127.0.0.1:5173",
+#     "https://quenchquestsocialfoundation.org",
+# ]
