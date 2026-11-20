@@ -14,9 +14,9 @@ class AuthenticationAPITest(APITestCase):
 
     def setUp(self):
 
-        self.register_url = "/register/"
-        self.verify_url = "/verify-otp/"
-        self.login_url = "/login/"
+        self.register_url = "/api/auth/register/"
+        self.verify_url = "/api/auth/verify-otp/"
+        self.login_url = "/api/auth/login/"
 
         self.user = User.objects.create(
             name="Pratiksha",
@@ -257,7 +257,7 @@ class AuthenticationAPITest(APITestCase):
             "email": "pratiksha@gmail.com"
         }
 
-        response = self.client.post("/forgot-password/", data)
+        response = self.client.post("/api/auth/forgot-password/", data)
 
         self.user.refresh_from_db()
 
@@ -277,7 +277,7 @@ class AuthenticationAPITest(APITestCase):
         }
 
         response = self.client.post(
-            "/forgot-password/",
+            "/api/auth/forgot-password/",
             data
         )
 
@@ -289,7 +289,7 @@ class AuthenticationAPITest(APITestCase):
     def test_forgot_password_missing_email(self):
 
         response = self.client.post(
-            "/forgot-password/",
+            "/api/auth/forgot-password/",
             {}
         )
 
@@ -310,7 +310,7 @@ class AuthenticationAPITest(APITestCase):
         }
 
         response = self.client.post(
-            "/reset-password/",
+            "/api/auth/reset-password/",
             data
         )
 
@@ -331,7 +331,7 @@ class AuthenticationAPITest(APITestCase):
         }
 
         response = self.client.post(
-            "/reset-password/",
+            "/api/auth/reset-password/",
             data
         )
 
@@ -349,7 +349,7 @@ class AuthenticationAPITest(APITestCase):
         }
 
         response = self.client.post(
-            "/reset-password/",
+            "/api/auth/reset-password/",
             data
         )
 
@@ -361,7 +361,7 @@ class AuthenticationAPITest(APITestCase):
     def test_reset_password_missing_fields(self):
 
         response = self.client.post(
-            "/reset-password/",
+            "/api/auth/reset-password/",
             {}
         )
 
@@ -374,15 +374,19 @@ class AuthenticationAPITest(APITestCase):
 
         data = {
             "username": "employee1",
-            "email": "employee@gmail.com",
+            "email": "employee1@gmail.com",
             "phone": "9876543211",
             "location": "Pune",
             "password": "Employee123",
             "choice": "employee_role"
         }
 
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {self.get_admin_token()}"
+        )
+
         response = self.client.post(
-            "/sisuser/create/",
+            "/api/auth/sisuser/create/",
             data
         )
 
@@ -408,8 +412,12 @@ class AuthenticationAPITest(APITestCase):
     "choice": "admin"
 }
 
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {self.get_admin_token()}"
+        )
+
         response = self.client.post(
-            "/sisuser/create/",
+            "/api/auth/sisuser/create/",
             data
         )
 
@@ -426,7 +434,7 @@ class AuthenticationAPITest(APITestCase):
 }
 
         response = self.client.post(
-            "/sisuser/login/",
+            "/api/auth/sisuser/login/",
             data
         )
 
@@ -448,7 +456,7 @@ class AuthenticationAPITest(APITestCase):
         }
 
         response = self.client.post(
-            "/sisuser/login/",
+            "/api/auth/sisuser/login/",
             data
         )
 
@@ -465,7 +473,7 @@ class AuthenticationAPITest(APITestCase):
 }
 
         response = self.client.post(
-            "/sisuser/login/",
+            "/api/auth/sisuser/login/",
             data
         )
 
@@ -477,7 +485,7 @@ class AuthenticationAPITest(APITestCase):
     def test_sisuser_login_missing_fields(self):
 
         response = self.client.post(
-            "/sisuser/login/",
+            "/api/auth/sisuser/login/",
             {}
         )
 
@@ -529,7 +537,7 @@ class AuthenticationAPITest(APITestCase):
         HTTP_AUTHORIZATION=f"Bearer {token}"
     )
 
-     response = self.client.get("/dashboard/")
+     response = self.client.get("/api/auth/dashboard/")
 
      self.assertEqual(
         response.status_code,
@@ -545,7 +553,7 @@ class AuthenticationAPITest(APITestCase):
         HTTP_AUTHORIZATION=f"Bearer {token}"
     )
 
-     response = self.client.get("/dashboard/")
+     response = self.client.get("/api/auth/dashboard/")
 
      self.assertEqual(
         response.status_code,
@@ -555,7 +563,7 @@ class AuthenticationAPITest(APITestCase):
 
     def test_dashboard_without_token(self):
 
-     response = self.client.get("/dashboard/")
+     response = self.client.get("/api/auth/dashboard/")
 
      self.assertEqual(
         response.status_code,
@@ -569,7 +577,7 @@ class AuthenticationAPITest(APITestCase):
         HTTP_AUTHORIZATION="Bearer invalidtoken"
     )
 
-     response = self.client.get("/dashboard/")
+     response = self.client.get("/api/auth/dashboard/")
 
      self.assertEqual(
         response.status_code,
@@ -584,7 +592,7 @@ class AuthenticationAPITest(APITestCase):
         HTTP_AUTHORIZATION=f"Bearer {token}"
     )
 
-     response = self.client.get("/profile/")
+     response = self.client.get("/api/auth/profile/")
 
      self.assertEqual(
         response.status_code,
@@ -605,7 +613,7 @@ class AuthenticationAPITest(APITestCase):
     )
 
      response = self.client.patch(
-        "/profile/",
+        "/api/auth/profile/",
         {
             "phone": "9999999999",
             "location": "Mumbai"
@@ -627,7 +635,7 @@ class AuthenticationAPITest(APITestCase):
 
     def test_profile_without_token(self):
 
-     response = self.client.get("/profile/")
+     response = self.client.get("/api/auth/profile/")
 
      self.assertEqual(
         response.status_code,
@@ -643,7 +651,7 @@ class AuthenticationAPITest(APITestCase):
     )
 
      response = self.client.delete(
-        f"/employee/delete/{self.employee.id}/"
+        f"/api/auth/employee/delete/{self.employee.id}/"
     )
 
      self.assertEqual(
@@ -673,7 +681,7 @@ class AuthenticationAPITest(APITestCase):
     )
 
      response = self.client.delete(
-        f"/employee/delete/{another.id}/"
+        f"/api/auth/employee/delete/{another.id}/"
     )
 
      self.assertEqual(
@@ -684,7 +692,7 @@ class AuthenticationAPITest(APITestCase):
     def test_delete_without_token(self):
 
      response = self.client.delete(
-        f"/employee/delete/{self.employee.id}/"
+        f"/api/auth/employee/delete/{self.employee.id}/"
     )
 
      self.assertEqual(
@@ -702,7 +710,7 @@ class AuthenticationAPITest(APITestCase):
     )
 
      response = self.client.delete(
-        "/employee/delete/9999/"
+        "/api/auth/employee/delete/9999/"
     )
 
      self.assertEqual(
@@ -718,7 +726,7 @@ class AuthenticationAPITest(APITestCase):
         HTTP_AUTHORIZATION=f"Bearer {token}"
     )
 
-     response = self.client.get("/profile/")
+     response = self.client.get("/api/auth/profile/")
 
      self.assertEqual(
         response.status_code,
@@ -734,7 +742,7 @@ class AuthenticationAPITest(APITestCase):
         HTTP_AUTHORIZATION=f"Bearer {token}"
     )
 
-     response = self.client.get("/profile/")
+     response = self.client.get("/api/auth/profile/")
 
      self.assertEqual(
         response.status_code,
@@ -742,5 +750,20 @@ class AuthenticationAPITest(APITestCase):
     )
 
 
+    def test_create_sisuser_requires_admin(self):
 
-     
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {self.get_employee_token()}"
+        )
+
+        response = self.client.post(
+            "/api/auth/sisuser/create/",
+            {
+                "username": "sneaky",
+                "email": "sneaky@gmail.com",
+                "password": "Sneaky123",
+                "choice": "admin",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

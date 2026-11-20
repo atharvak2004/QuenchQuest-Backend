@@ -18,16 +18,23 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
-load_dotenv()
+# Load .env by explicit path so it works no matter which folder you start the
+# server from. Supports both quenchQuestBackend/.env and project/.env.
+load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR / "project" / ".env")
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-c5hh-f2ui)qcfs5fg724d12bxy1wm36-dz%#x@usfcnq-^l)w('
+# Set SECRET_KEY in .env. The fallback keeps existing tokens valid until you do,
+# but it is public (it is in git history), so replace it in production.
+SECRET_KEY = os.getenv(
+    "SECRET_KEY",
+    'django-insecure-c5hh-f2ui)qcfs5fg724d12bxy1wm36-dz%#x@usfcnq-^l)w(',
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG", "False").strip().lower() in ("1", "true", "yes")
 
 # ALLOWED_HOSTS = [
 #     '127.0.0.1',
@@ -64,6 +71,7 @@ INSTALLED_APPS = [
     'website',
     'drf_spectacular',
     'dashboard',
+    'adminpanel',
 ]
 
 REST_FRAMEWORK = {
@@ -92,7 +100,14 @@ SPECTACULAR_SETTINGS = {
 
     "SWAGGER_UI_SETTINGS": {
         "persistAuthorization": True
-    }
+    },
+
+    "ENUM_NAME_OVERRIDES": {
+        "ProjectStatusEnum": "website.models.Project.STATUS_CHOICES",
+        "ContactStatusEnum": "contact.models.Contact.STATUS_CHOICES",
+        "CampaignStatusEnum": "dashboard.models.Campaign.STATUS_CHOICES",
+        "BeneficiaryStatusEnum": [("pending", "Pending"), ("approved", "Approved"), ("helped", "Helped")],
+    },
     
 }
 
@@ -130,24 +145,23 @@ WSGI_APPLICATION = 'project.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
+DB_ENGINE = os.getenv('ENGINE', 'django.db.backends.mysql')
 
 DATABASES = {
     'default': {
-        'ENGINE': os.getenv('ENGINE'),
+        'ENGINE': DB_ENGINE,
         'NAME': os.getenv('DB_NAME'),
         'USER': os.getenv('DB_USER'),
         'PASSWORD': os.getenv('DB_PASSWORD'),
         'HOST': os.getenv('DB_HOST'),
         'PORT': os.getenv('DB_PORT'),
-        'OPTIONS': {
-            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
-        },
     }
 }
+
+if 'mysql' in DB_ENGINE:
+    DATABASES['default']['OPTIONS'] = {
+        'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+    }
 
 
 # Password validation
@@ -185,11 +199,29 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Uploaded files (e.g. Leadership images)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# JWT lifetimes (see authentication/tokens.py)
+JWT_ACCESS_HOURS = int(os.getenv("JWT_ACCESS_HOURS", "24"))
+JWT_REFRESH_DAYS = int(os.getenv("JWT_REFRESH_DAYS", "30"))
+
+# Image uploads (admin panel)
+MAX_IMAGE_UPLOAD_MB = 5
+IMAGE_WEB_MAX_PX = 1600
+
+# Website refresh hook: after any content save the backend POSTs here with
+# the header `X-Revalidate-Secret`. Leave empty to disable.
+WEBSITE_REVALIDATE_URL = os.getenv("WEBSITE_REVALIDATE_URL", "")
+WEBSITE_REVALIDATE_SECRET = os.getenv("WEBSITE_REVALIDATE_SECRET", "")
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 
@@ -199,15 +231,25 @@ EMAIL_PORT = 587
 
 EMAIL_USE_TLS = True
 
-EMAIL_HOST_USER = "quenchquestsocialfoundation@gmail.com"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "quenchquestsocialfoundation@gmail.com")
 
-EMAIL_HOST_PASSWORD = "bnltbgfnvyajepje"
+# Gmail app password - must be set in .env (never commit it).
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+
+# Where "new volunteer verified" notifications are sent.
+ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL", EMAIL_HOST_USER)
 
 # AUTH_USER_MODEL = "authentication.SisUser"
 
+# Comma-separated in .env, e.g.
+# CORS_ALLOWED_ORIGINS=http://localhost:5173,https://quenchquestsocialfoundation.org
 CORS_ALLOWED_ORIGINS = [
-    "https://quenchquestsocialfoundation.org",
-    "https://www.quenchquestsocialfoundation.org",
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "https://quenchquestsocialfoundation.org,https://www.quenchquestsocialfoundation.org",
+    ).split(",")
+    if origin.strip()
 ]
 
 # CORS_ALLOWED_ORIGINS = [

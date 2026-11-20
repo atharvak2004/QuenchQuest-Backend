@@ -26,3 +26,7 @@ class ContactAdmin(admin.ModelAdmin):
         "-created_at",
     )
     date_hierarchy = "created_at"
+
+from .models import ContactNote
+
+admin.site.register(ContactNote)

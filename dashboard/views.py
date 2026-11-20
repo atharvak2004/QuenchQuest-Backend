@@ -15,8 +15,13 @@ from django.db.models import Q
 from authentication.sisuser_jwt_auth import SisUserJWTAuthentication
 
 from .pagination import VolunteerPagination
+from .campaign_stats import with_stats
 from rest_framework.permissions import IsAuthenticated
-from authentication.permissions import IsEmployeeOrAdmin
+from authentication.permissions import (
+    IsEmployeeOrAdmin,
+    IsStaffOrReadOnlyAuthenticated,
+    IsVolunteerOrStaff,
+)
 from django.contrib.auth.hashers import make_password
 from .serializers import VolunteerUpdateSerializer
 
@@ -180,7 +185,9 @@ class VolunteerListCreateAPI(APIView):
         )
 
 class VolunteerUpdateAPI(APIView):
-    
+    authentication_classes = [SisUserJWTAuthentication]
+    permission_classes = [IsEmployeeOrAdmin]
+
     @extend_schema(
     summary="Update Volunteer",
     operation_id="volunteer_partial_update",
@@ -223,6 +230,9 @@ class VolunteerUpdateAPI(APIView):
 
 
 class TotalUsersAPI(APIView):
+    authentication_classes = [SisUserJWTAuthentication]
+    permission_classes = [IsEmployeeOrAdmin]
+
     @extend_schema(
     summary="Get Users Data",
     description="Retrieve Users statistics.",
@@ -248,86 +258,115 @@ class TotalUsersAPI(APIView):
 
 
 class CampaignAPI(APIView):
+    # Accepts both admin/employee tokens and volunteer tokens.
+    authentication_classes = [SisUserJWTAuthentication, UserJWTAuthentication]
+    permission_classes = [IsStaffOrReadOnlyAuthenticated]
 
-    authentication_classes = [UserJWTAuthentication]
     @extend_schema(
     summary="Get Campaigns",
-    description="Retrieve all campaigns.",
-    responses=CampaignSerializer)
+    description="Retrieve all campaigns. Any logged-in volunteer, employee or admin.",
+    responses=CampaignSerializer(many=True))
     def get(self, request):
-        campaigns = Campaign.objects.all()
-        serializer = CampaignSerializer(campaigns, many=True)
+        campaigns = Campaign.objects.filter(is_archived=False)
+        if isinstance(request.user, User):  # volunteers only see published campaigns
+            campaigns = campaigns.filter(is_published=True)
+        campaigns = with_stats(campaigns).select_related("service", "project").order_by("-created_at")
+        serializer = CampaignSerializer(campaigns, many=True, context={"request": request})
         return Response(serializer.data)
+
     @extend_schema(
     summary="Create Campaigns",
-    description="create a new campaign.",
+    description="Create a new campaign. Admin/employee only.",
     request=CampaignSerializer,
     responses=CampaignSerializer)
     def post(self, request):
-        serializer = CampaignSerializer(data=request.data)
+        serializer = CampaignSerializer(data=request.data, context={"request": request})
 
         if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=201)
-        
-        return Response(serializer.errors, status=400)    
-    
+            serializer.save(updated_by=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class BeneficiaryAPI(APIView):
-    authentication_classes = [UserJWTAuthentication]
+    authentication_classes = [SisUserJWTAuthentication, UserJWTAuthentication]
+    permission_classes = [IsVolunteerOrStaff]
+
     @extend_schema(
         summary="Get Beneficiaries",
         description="Retrieve all beneficiaries.",
-        responses=BeneficiarySerializer)
+        responses=BeneficiarySerializer(many=True))
     def get(self, request):
-        beneficiaries = Beneficiary.objects.select_related('user').all()
+        beneficiaries = Beneficiary.objects.select_related("user").order_by("-created_at")
         serializer = BeneficiarySerializer(beneficiaries, many=True)
         return Response(serializer.data)
 
     @extend_schema(
         summary="Create Beneficiary",
-        description="Create a new beneficiary linked with user.",
+        description=(
+            "Create a new beneficiary. With a volunteer token the logged-in volunteer is "
+            "attached automatically; with an admin/employee token pass `user` (volunteer id) "
+            "or leave it empty."
+        ),
         request=BeneficiarySerializer,
         responses=BeneficiarySerializer)
     def post(self, request):
-        data = request.data.copy()
-        # automatically attach logged-in user
-        data['user'] = request.user.id
-        serializer = BeneficiarySerializer(data=data)
+        serializer = BeneficiarySerializer(data=request.data)
 
         if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=201)
-        return Response(serializer.errors, status=400)
-    
-       
-class DonationAPI(APIView):
+            if isinstance(request.user, User):
+                serializer.save(user=request.user)
+            else:
+                serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    authentication_classes = [UserJWTAuthentication]
+
+class DonationAPI(APIView):
+    authentication_classes = [SisUserJWTAuthentication, UserJWTAuthentication]
+    permission_classes = [IsVolunteerOrStaff]
+
     @extend_schema(
     summary="Get Donations",
-    description="Retrieve all donations.",
-    responses=DonationSerializer)
+    description="Admin/employee see all donations; a volunteer sees only their own.",
+    responses=DonationSerializer(many=True))
     def get(self, request):
-        donations = Donation.objects.all()
-        serializer = DonationSerializer(
-            donations,
-            many=True
-        )
+        donations = Donation.objects.select_related("donor", "campaign").order_by("-created_at")
+        if isinstance(request.user, User):
+            donations = donations.filter(donor=request.user)
+        if request.query_params.get("campaign"):
+            donations = donations.filter(campaign_id=request.query_params["campaign"])
+        serializer = DonationSerializer(donations, many=True)
         return Response(serializer.data)
+
     @extend_schema(
     summary="Create Donations",
-    description="create a new donation.",
+    description=(
+        "Create a new donation. With a volunteer token the donor is the logged-in "
+        "volunteer; with an admin/employee token `donor` (volunteer id) is required."
+    ),
     request=DonationSerializer,
     responses=DonationSerializer)
     def post(self, request):
         serializer = DonationSerializer(data=request.data)
 
         if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=201)
+            campaign = serializer.validated_data.get("campaign")
+            if isinstance(request.user, User) and campaign and (campaign.is_archived or not campaign.is_published):
+                return Response({"campaign": ["Campaign not found."]}, status=status.HTTP_400_BAD_REQUEST)
+            if isinstance(request.user, User):
+                serializer.save(donor=request.user)
+            elif serializer.validated_data.get("donor"):
+                serializer.save()
+            else:
+                return Response(
+                    {"donor": ["This field is required."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-        return Response(serializer.errors, status=400)    
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # class CampaignAPI(APIView):

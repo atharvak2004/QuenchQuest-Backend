@@ -1,7 +1,6 @@
 from rest_framework import serializers
 from .models import User
 from .models import SisUser
-from django.contrib.auth import get_user_model
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -70,7 +69,23 @@ class SisUserLoginSerializer(serializers.Serializer):
     password = serializers.CharField()
 
 
-    User = get_user_model()
+class LoginUserDataSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    volunteer_id = serializers.CharField()
+    name = serializers.CharField()
+    email = serializers.EmailField()
+    phone = serializers.CharField()
+    gender = serializers.CharField(allow_null=True)
+    skills = serializers.CharField(allow_null=True)
+    location = serializers.CharField(allow_null=True)
+    availability = serializers.CharField(allow_null=True)
+
+
+class LoginResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
+    user = LoginUserDataSerializer()
+    token = serializers.CharField()
+    refresh = serializers.CharField()
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -129,13 +144,48 @@ class SisUserCreateResponseSerializer(serializers.Serializer):
 
 class SisUserLoginResponseSerializer(serializers.Serializer):
     token = serializers.CharField()
+    refresh = serializers.CharField()
+    id = serializers.IntegerField()
     role = serializers.CharField()
-    username = serializers.CharField()    
+    username = serializers.CharField()
+    modules = serializers.ListField(child=serializers.CharField())    
 
 class DashboardResponseSerializer(serializers.Serializer):
     message = serializers.CharField()
     user = serializers.CharField()
     role = serializers.CharField()
 
-class MessageResponseSerializer(serializers.Serializer):
-    message = serializers.CharField()        
+
+class TokenRefreshRequestSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
+
+
+class TokenPairSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    refresh = serializers.CharField()
+
+
+class MeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            "id", "volunteer_id", "name", "email", "phone", "gender",
+            "skills", "location", "availability", "is_verified", "created_at",
+        ]
+        # Email is the login identity; changing it would skip OTP verification.
+        read_only_fields = ["id", "volunteer_id", "email", "is_verified", "created_at"]
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField()
+    new_password = serializers.CharField(min_length=8)
+
+    def validate_old_password(self, value):
+        if not self.context["user"].check_password(value):
+            raise serializers.ValidationError("Current password is incorrect.")
+        return value
+
+    def validate(self, attrs):
+        if attrs["old_password"] == attrs["new_password"]:
+            raise serializers.ValidationError({"new_password": "Choose a different password."})
+        return attrs

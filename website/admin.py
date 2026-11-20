@@ -58,3 +58,27 @@ class ProgramCardAdmin(admin.ModelAdmin):
     ordering = (
         "title",
     )
+
+@admin.register(Service)
+class ServiceAdmin(admin.ModelAdmin):
+    list_display = ("id", "title", "slug", "display_order", "is_published", "show_on_home", "is_archived")
+    list_filter = ("is_published", "show_on_home", "is_archived")
+    search_fields = ("title", "slug")
+    ordering = ("display_order",)
+
+
+@admin.register(Project)
+class ProjectAdmin(admin.ModelAdmin):
+    list_display = ("id", "title", "service", "status", "is_published", "is_featured", "is_archived")
+    list_filter = ("status", "is_published", "is_featured", "is_archived", "service")
+    search_fields = ("title", "slug", "location_name")
+    filter_horizontal = ("volunteers",)
+
+
+admin.site.register(ProjectImage)
+admin.site.register(MediaAsset)
+admin.site.register(FAQ)
+admin.site.register(SiteSettings)
+admin.site.register(ContentBlock)
+admin.site.register(Page)
+admin.site.register(SlugRedirect)

@@ -1,4 +1,6 @@
 from django.urls import path
+from rest_framework.routers import SimpleRouter
+from dashboard.campaign_views import PublicCampaignViewSet
 from .views import *
 from .views import UserPathSearchAPI
 from .views import UserQuerySearchAPI
@@ -9,4 +11,15 @@ urlpatterns = [
     path("program-cards/",ProgramCardAPI.as_view(),name="program-cards"),
     # path("users/<str:search>/", UserPathSearchAPI.as_view()),
     path("users/", UserQuerySearchAPI.as_view()),
+    path("settings/", PublicSiteSettingsAPI.as_view(), name="site-settings"),
+    path("stats/", PublicStatsAPI.as_view(), name="site-stats"),
 ]
+
+router = SimpleRouter()
+router.register("services", PublicServiceViewSet, basename="services")
+router.register("projects", PublicProjectViewSet, basename="projects")
+router.register("faqs", PublicFAQViewSet, basename="faqs")
+router.register("content-blocks", PublicContentBlockViewSet, basename="content-blocks")
+router.register("pages", PublicPageViewSet, basename="pages")
+router.register("campaigns", PublicCampaignViewSet, basename="campaigns")
+urlpatterns += router.urls

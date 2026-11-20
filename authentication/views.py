@@ -1,4 +1,7 @@
 import random
+
+from django.utils import timezone
+from .tokens import issue_tokens, user_from_refresh
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -92,6 +95,7 @@ responses=MessageResponseSerializer)
             )
 
             user.otp = otp
+            user.otp_sent_at = timezone.now()
             user.is_verified = False
             user.save()
 
@@ -181,7 +185,7 @@ Team QuenchQuest
 
             from_email = settings.EMAIL_HOST_USER
 
-            to = ["admin@gmail.com"]   # Replace with your admin email
+            to = [settings.ADMIN_NOTIFICATION_EMAIL]
 
             text_content = f"""
 A new user has registered.
@@ -326,7 +330,7 @@ class LoginAPI(APIView):
     summary="User Login",
     description="Authenticate user.",
     request=LoginSerializer,
-    responses=RegisterSerializer)
+    responses=LoginResponseSerializer)
 
     def post(self, request):
 
@@ -355,11 +359,18 @@ class LoginAPI(APIView):
                     {"Error": "Please verify your email first."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            token = generate_token(user)
+            if not user.is_active:
+                return Response(
+                    {"Error": "This account has been deactivated. Please contact us."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            tokens = issue_tokens(user)
             return Response(
                 {
                     "message": "Login successful.",
                     "user": {
+                         "id": user.id,
+                         "volunteer_id": user.volunteer_id,
                          "name": user.name,
                          "email": user.email,
                          "phone": user.phone,
@@ -368,8 +379,8 @@ class LoginAPI(APIView):
                          "location": user.location,
                          "availability": user.availability,
         },
-                    "token": token,
-                    
+                    "token": tokens["token"],
+                    "refresh": tokens["refresh"],
                 },
                 status=status.HTTP_200_OK
             )
@@ -405,6 +416,7 @@ class ForgotPasswordAPI(APIView):
             otp = str(random.randint(100000, 999999))
 
             user.otp = otp
+            user.otp_sent_at = timezone.now()
             user.save()
 
             send_mail(
@@ -489,13 +501,16 @@ class ResetPasswordAPI(APIView):
 class SisUserCreateAPIView(generics.CreateAPIView):
     queryset = SisUser.objects.all()
     serializer_class = SisUserSerializer
+    # Only an existing admin may create employee/admin accounts.
+    authentication_classes = [SisUserJWTAuthentication]
+    permission_classes = [IsSisAdmin]
 
 
 # LIST USERS (ADMIN ONLY)
 @extend_schema(
     summary="List Employee and Admin",
     description="Retrieve all Employee and Admin accounts.",
-    responses=SisUserCreateResponseSerializer)
+    responses=SisUserCreateResponseSerializer(many=True))
 class SisUserListAPIView(generics.ListAPIView):
     queryset = SisUser.objects.all()
     serializer_class = SisUserSerializer
@@ -519,38 +534,51 @@ class SisUserLoginAPIView(APIView):
             username = serializer.validated_data["username"]
             password = serializer.validated_data["password"]
 
-            try:
-                user = SisUser.objects.get(username=username)
-
-            except SisUser.DoesNotExist:
+            user = SisUser.objects.filter(username=username).first()
+            if not user:
                 return Response(
                     {"Error": "Invalid username or password."},
                     status=status.HTTP_401_UNAUTHORIZED
                 )
 
-            if not check_password(password, user.password):
+            now = timezone.now()
+            if user.locked_until and user.locked_until > now:
+                minutes = max(1, int((user.locked_until - now).total_seconds() // 60) + 1)
                 return Response(
-                    {"Error": "Invalid password."},
+                    {"Error": f"Too many failed attempts. Try again in {minutes} minute(s)."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            if not check_password(password, user.password):
+                user.failed_login_attempts += 1
+                if user.failed_login_attempts >= SisUser.MAX_FAILED_LOGINS:
+                    user.locked_until = now + timedelta(minutes=SisUser.LOCK_MINUTES)
+                    user.failed_login_attempts = 0
+                user.save(update_fields=["failed_login_attempts", "locked_until"])
+                return Response(
+                    {"Error": "Invalid username or password."},
                     status=status.HTTP_401_UNAUTHORIZED
                 )
 
-            payload = {
-                "sisuser_id": user.id,
-                "username": user.username,
-                "role": user.choice,
-                "exp": datetime.utcnow() + timedelta(days=1)
-            }
+            if not user.is_active:
+                return Response(
+                    {"Error": "This account has been deactivated."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
 
-            token = jwt.encode(
-                payload,
-                settings.SECRET_KEY,
-                algorithm="HS256"
-            )
+            user.failed_login_attempts = 0
+            user.locked_until = None
+            user.last_login = now
+            user.save(update_fields=["failed_login_attempts", "locked_until", "last_login"])
 
+            tokens = issue_tokens(user)
             return Response({
-                "token": token,
+                "token": tokens["token"],
+                "refresh": tokens["refresh"],
+                "id": user.id,
                 "role": user.choice,
-                "username": user.username
+                "username": user.username,
+                "modules": sorted(user.modules),
             })
 
         return Response(
@@ -637,3 +665,123 @@ class ProfileAPIView(APIView):
             })
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ---------------------------------------------------------------------------
+# Tokens, "me", resend OTP, change password
+# ---------------------------------------------------------------------------
+
+class TokenRefreshAPIView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get_authenticate_header(self, request):
+        # So a bad/expired refresh token is a 401 (log in again), not a 403.
+        return "Bearer"
+
+    @extend_schema(
+        summary="Refresh token",
+        description="Exchange a refresh token (volunteer or staff) for a new access + refresh token pair.",
+        request=TokenRefreshRequestSerializer,
+        responses=TokenPairSerializer)
+    def post(self, request):
+        serializer = TokenRefreshRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = user_from_refresh(serializer.validated_data["refresh"])
+        return Response(issue_tokens(user))
+
+
+class MeAPIView(APIView):
+    """The logged-in volunteer's own profile."""
+
+    authentication_classes = [UserJWTAuthentication]
+    permission_classes = [IsVolunteer]
+
+    @extend_schema(summary="Get my volunteer profile", responses=MeSerializer)
+    def get(self, request):
+        return Response(MeSerializer(request.user).data)
+
+    @extend_schema(summary="Update my volunteer profile", request=MeSerializer, responses=MeSerializer)
+    def patch(self, request):
+        serializer = MeSerializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+
+OTP_RESEND_COOLDOWN_SECONDS = 60
+
+
+def send_verification_otp(user):
+    """Create a new OTP for an unverified volunteer and email it."""
+    otp = str(random.randint(100000, 999999))
+    user.otp = otp
+    user.otp_sent_at = timezone.now()
+    user.save(update_fields=["otp", "otp_sent_at"])
+    send_mail(
+        "OTP Verification - QuenchQuest",
+        f"""
+Hello {user.name},
+
+Your new OTP for email verification is: {otp}
+
+Please do not share this OTP with anyone.
+
+Regards,
+QuenchQuest Team
+""",
+        settings.EMAIL_HOST_USER,
+        [user.email],
+        fail_silently=False,
+    )
+
+
+class ResendOTPAPIView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    @extend_schema(
+        summary="Resend verification OTP",
+        description="Send a new OTP to an unverified volunteer. One request per minute.",
+        request=ForgotPasswordSerializer,
+        responses=MessageResponseSerializer)
+    def post(self, request):
+        email = request.data.get("email")
+        if not email:
+            return Response({"Error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(email=email).first()
+        if not user:
+            return Response({"Error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+        if user.is_verified:
+            return Response({"Error": "This email is already verified."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if user.otp_sent_at:
+            wait = OTP_RESEND_COOLDOWN_SECONDS - (timezone.now() - user.otp_sent_at).total_seconds()
+            if wait > 0:
+                return Response(
+                    {"Error": f"Please wait {int(wait) + 1} seconds before asking for a new OTP."},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+
+        send_verification_otp(user)
+        return Response({"message": "A new OTP has been sent to your email."})
+
+
+class ChangePasswordAPIView(APIView):
+    """Admin/employee/editor changes their own password. Logs out other sessions."""
+
+    authentication_classes = [SisUserJWTAuthentication]
+    permission_classes = [IsAnyStaff]
+
+    @extend_schema(
+        summary="Change my password (staff)",
+        request=ChangePasswordSerializer,
+        responses=TokenPairSerializer)
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data, context={"user": request.user})
+        serializer.is_valid(raise_exception=True)
+        request.user.set_password(serializer.validated_data["new_password"])
+        request.user.save(update_fields=["password"])
+        # Old tokens stop working; hand back fresh ones so this session continues.
+        return Response({"message": "Password changed.", **issue_tokens(request.user)})
