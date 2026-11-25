@@ -37,6 +37,8 @@ class User(models.Model):
     is_verified = models.BooleanField(default=False)
     # Deactivated volunteers can't log in; set from the admin panel.
     is_active = models.BooleanField(default=True)
+    # Google account id ("sub") once the volunteer has used "Sign in with Google".
+    google_sub = models.CharField(max_length=255, unique=True, null=True, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     # Needed so DRF permission classes (e.g. IsAuthenticated) work when a
@@ -66,6 +68,10 @@ class User(models.Model):
             self.volunteer_id = f"QQ{new_number:03d}"
 
         super().save(*args, **kwargs)
+
+    @property
+    def profile_complete(self):
+        return bool(self.phone and self.skills)
 
     def __str__(self):
         return self.name

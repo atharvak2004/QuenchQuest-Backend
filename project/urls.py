@@ -21,6 +21,8 @@ from drf_spectacular.views import (SpectacularAPIView,SpectacularSwaggerView, )
 from django.conf import settings
 from django.conf.urls.static import static
 from dashboard.campaign_views import CampaignJoinAPIView
+from volunteering.certificate_views import CertificateDownloadAPIView
+from volunteering.views import ProjectAttendanceAPIView, ProjectJoinAPIView
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/contact/', include('contact.urls')),
@@ -29,6 +31,9 @@ urlpatterns = [
     path('api/dashboard/', include('dashboard.urls')),
     path('api/admin/', include('adminpanel.urls')),
     path('api/campaigns/<int:pk>/join/', CampaignJoinAPIView.as_view(), name='campaign-join'),
+    path('api/projects/<int:pk>/join/', ProjectJoinAPIView.as_view(), name='project-join'),
+    path('api/projects/<int:pk>/attendance/', ProjectAttendanceAPIView.as_view(), name='project-attendance'),
+    path('api/certificates/<str:certificate_id>/download/', CertificateDownloadAPIView.as_view(), name='certificate-download'),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/',SpectacularSwaggerView.as_view(url_name='schema'),name='swagger-ui'),
     # path('api/redoc/',SpectacularRedocView.as_view(url_name='schema'),name='redoc',),

@@ -23,7 +23,7 @@ An admin can narrow an employee's or editor's access with `module_access`, e.g. 
 |---|---|
 | `content` | services, projects, leadership, impact, faqs, content-blocks, pages, media, settings |
 | `inbox` | contacts |
-| `volunteers` | volunteers, plus the volunteer actions on a project |
+| `volunteers` | volunteers, attendance, attendance-codes, certificates, plus the volunteer actions on a project |
 | `campaigns` | campaigns, beneficiaries, donations |
 | `staff` | staff |
 | any staff | dashboard, change own password |
@@ -234,7 +234,127 @@ URL.revokeObjectURL(url);
 | `POST /api/admin/volunteers/{id}/resend-verification/` | Emails a new OTP (400 if already verified) |
 | `GET /api/admin/volunteers/export/` | CSV download with the same filters |
 
-To create a volunteer, keep using `POST /api/dashboard/volunteers/`; it returns the generated password. For matching volunteers to a project, see the Projects section.
+To create a volunteer, keep using `POST /api/dashboard/volunteers/`; it returns the generated password. For matching volunteers to a project, see the Projects section. Each volunteer also returns `signs_in_with_google`.
+
+The "By name or ID" search uses `GET /api/admin/volunteers/?search=` (name, email, phone or volunteer ID) and `GET /api/admin/volunteers/{id}/` for a record number. Volunteers who join from the website appear in the project's volunteer list just like staff-added ones.
+
+### Attendance (module `volunteers`)
+
+At a session, staff create a short code and share it. Volunteers type it on their dashboard and are marked present at once. Volunteers who can't get a code send a photo instead, which staff approve or reject here.
+
+**Codes — `/api/admin/attendance-codes/`**
+
+| Call | Purpose |
+|---|---|
+| `POST /api/admin/attendance-codes/` | `{ "project": 7, "valid_hours": 4, "note": "Saturday session" }`. `valid_hours` is optional: the default is 12 and the maximum 72. Instead of it you can send `valid_from` / `valid_until`. The code is generated: 6 characters with no look-alike letters (`0/O`, `1/I/L`) |
+| `GET /api/admin/attendance-codes/?project=7&valid=true` | List. `valid=true` returns codes usable right now |
+| `PATCH /api/admin/attendance-codes/{id}/` | Change `note`, `valid_until` or `valid_hours` |
+| `DELETE /api/admin/attendance-codes/{id}/` | Switch the code off |
+
+Each code returns `{ id, project, project_title, code, note, valid_from, valid_until, is_active, is_valid_now, uses, created_by_name, created_at }`.
+
+**Records — `/api/admin/attendance/`**
+
+| Call | Purpose |
+|---|---|
+| `GET /api/admin/attendance/?status=pending` | The approval queue. Other filters: `?project=`, `?volunteer=`, `?method=code\|photo`, `?date=`, `?date_from=`, `?date_to=`; `search` covers volunteer name, email, volunteer ID and project |
+| `POST /api/admin/attendance/{id}/approve/` | Approve, with an optional `{ "note": "..." }` |
+| `POST /api/admin/attendance/{id}/reject/` | `{ "note": "Photo too dark" }`. The volunteer sees the note and can send a new photo |
+| `POST /api/admin/attendance/bulk-approve/` | `{ "ids": [4, 5, 9] }` approves those records that are still pending |
+| `GET /api/admin/attendance/export/` | CSV with the same filters |
+| `DELETE /api/admin/attendance/{id}/` | Remove a record permanently |
+
+Each record returns:
+- the project: `project`, `project_title`
+- the volunteer: `volunteer`, `volunteer_name`, `volunteer_code` (e.g. `QQ005`), `volunteer_email`
+- the check-in: `date`, `method`, `status`, `code_used`, `photo` (an absolute URL), `latitude`, `longitude`
+- the review: `reviewed_by_name`, `reviewed_at`, `review_note`, plus the timestamps
+
+Staff can't create records directly; volunteers mark their own attendance.
+
+### Inbox: project
+Messages sent from the volunteer form can carry a project. The inbox returns `project`, `project_title` and `project_slug`, filters with `?project=<id>`, and includes the project in the CSV.
+
+### Certificates (module `volunteers`)
+
+After an event, staff give a **certificate of appreciation** to every volunteer who was present. A volunteer counts as present when they have at least one **approved** attendance day on the project (see Attendance above).
+
+Each certificate shows:
+- the volunteer's name
+- the project's name
+- the date
+- a certificate ID such as `QQ-7K3P-9XRM`
+- a QR code that opens the website's verify page
+
+The name, project and date are copied when the certificate is issued, so later renames don't change certificates already handed out.
+
+**Step 1: switch it on for the project.** On the project form this is a yes/no field, `certificates_enabled` (off by default). PATCH it on `/api/admin/projects/{id}/` like any other field, or use the settings call below.
+
+**Step 2: upload the template (optional).** Projects use the built-in QuenchQuest design unless they upload their own.
+
+| Call | Purpose |
+|---|---|
+| `GET /api/admin/projects/{id}/certificate-settings/` | `{ certificates_enabled, certificate_layout, template_url, uses_default_template, default_layout }` |
+| `PATCH /api/admin/projects/{id}/certificate-settings/` | `{ "certificates_enabled": true }` and/or `{ "certificate_layout": {...} }` (see Layout below) |
+| `POST /api/admin/projects/{id}/certificate-template/` | Multipart `image`: PNG, JPEG or WebP, up to 15 MB, at least 800 px wide. Replaces the project's template |
+| `DELETE /api/admin/projects/{id}/certificate-template/` | Go back to the built-in design |
+| `GET /api/admin/projects/{id}/certificates/preview/?name=Test%20Person&date=2026-11-22` | A PNG with sample text and a sample ID (`QQ-SAMP-LE00`). Show it next to the upload so staff can check the layout before issuing |
+
+For the preview image, fetch it as a blob with the auth header, then show it with `URL.createObjectURL`, the same way as the CSV downloads.
+
+**Step 3: issue after the event.**
+
+| Call | Purpose |
+|---|---|
+| `GET /api/admin/projects/{id}/certificates/?min_days=1` | Who attended: `{ certificates_enabled, issued_count, attendees: [{ id, volunteer_id, name, email, days_attended, certificate_id, certificate_status }] }`. `certificate_id` is `null` until a certificate is issued |
+| `POST /api/admin/projects/{id}/certificates/issue/` | Issue to everyone who attended and doesn't have one yet. Body (all optional): `{ "date": "2026-11-22", "volunteer_ids": [4, 7], "min_days": 1, "notify": true }` |
+| `POST /api/admin/projects/{id}/certificates/regenerate/` | Re-draw this project's valid certificates after changing the template or layout. The ID, name and date stay the same |
+
+Issue options:
+- `date` is printed on the certificate. It defaults to the project's `end_date`, or today if there isn't one.
+- `volunteer_ids` limits issuing to those volunteers; without it, everyone who attended gets one.
+- `min_days` is the number of approved days needed (default 1).
+- `notify` emails each volunteer that their certificate is ready, with its ID and verify link (default true).
+
+The response is `{ message, issued: [certificates], skipped: [{ volunteer, name, reason }] }`. **201** if any certificate was issued, otherwise **200**. Each volunteer gets one certificate per project; running issue again only adds certificates for new attendees. You get **400** if certificates are switched off or the project is archived.
+
+**Managing issued certificates — `/api/admin/certificates/`**
+
+| Call | Purpose |
+|---|---|
+| `GET /api/admin/certificates/?project=7&status=valid` | List. `status` is `valid` or `revoked`; also `?volunteer=<id>`. `search` covers the certificate ID, name, email, volunteer ID and project |
+| `GET /api/admin/certificates/{id}/` | One certificate |
+| `POST /api/admin/certificates/{id}/revoke/` | `{ "reason": "Issued by mistake" }`. Verification then shows it as revoked, and the volunteer can't download it |
+| `POST /api/admin/certificates/{id}/restore/` | Undo a revoke |
+| `POST /api/admin/certificates/{id}/regenerate/` | Re-draw it with the project's current template |
+| `GET /api/admin/certificates/{id}/download/?type=png` | Download it. `type=pdf` gives a PDF |
+
+Each certificate returns:
+- the ID and links: `id`, `certificate_id`, `verify_url`, `image` (an absolute URL)
+- the project: `project`, `project_title`
+- the volunteer: `volunteer`, `volunteer_name`, `volunteer_code`, `volunteer_email`, `days_attended`
+- the certificate itself: `date`, `status`, `revoked_at`, `revoke_reason`
+- who issued it: `issued_by_name`, `issued_at`
+
+A project that has certificates can be archived but not deleted permanently (**400**).
+
+**Layout (only needed for a template with a different design).** The built-in layout matches the QuenchQuest design. If an uploaded template puts the blanks somewhere else, send overrides with `certificate_layout`, using only the parts you need to move:
+
+```json
+{ "name": { "y": 0.44, "size": 0.05 }, "qr": { "x": 0.73, "y": 0.78, "size": 0.13 } }
+```
+
+Every number is a fraction of the template's size, so any resolution works:
+- `x` and `y` are where the text is anchored: `y` is the text baseline, and `x` is the left edge, centre or right edge depending on `align`. For the QR code, they are its top-left corner.
+- `size` is the font height, or the QR code's side length, as a fraction of the image height.
+- `max_width` is a fraction of the width. Longer text shrinks to fit.
+- `align` is `left`, `center` or `right`. `color` is a hex colour like `#12355b`. `bold` is `true` or `false`.
+
+The parts are `name`, `project`, `date`, `certificate_id` and `qr`. `default_layout` in the settings response shows the starting values. Use the preview after each change.
+
+**Backend settings** (`.env`):
+- `CERTIFICATE_VERIFY_URL` is the website page the QR code opens. It defaults to `https://quenchquestsocialfoundation.org/verify`; the code adds `?id=<certificate id>`.
+- `CERTIFICATE_FONT` / `CERTIFICATE_FONT_BOLD` are optional `.ttf` paths. Without them the backend uses Georgia, DejaVu Serif or Liberation Serif, whichever the server has. On a Linux server, install the fonts with `apt install fonts-dejavu-core`.
 
 ---
 
@@ -243,7 +363,7 @@ To create a volunteer, keep using `POST /api/dashboard/volunteers/`; it returns 
 | Call | Purpose |
 |---|---|
 | `GET /api/admin/staff/?role=editor&is_active=true` | List |
-| `POST /api/admin/staff/` | `{ username, email, phone, location, choice, module_access, password }`. `password` needs at least 8 characters |
+| `POST /api/admin/staff/` | `{ username, email, phone, location, choice, module_access, password }`. `password` needs at least 8 characters. `module_access` is optional: leave it out, or send `null` or `[]`, to use the role's default modules |
 | `PATCH /api/admin/staff/{id}/` | Change details, role or `module_access`. You can't remove your own admin role |
 | `DELETE /api/admin/staff/{id}/` | Deactivate (not your own account) |
 | `POST /api/admin/staff/{id}/activate/` | Reactivate |
@@ -316,6 +436,7 @@ Donations and beneficiaries are deleted permanently, with no archive step.
 {
   "volunteers": { "total": 120, "new_this_week": 6, "unverified": 9, "inactive": 1 },
   "messages":   { "unread": 3, "open": 5, "assigned_to_me": 2 },
+  "attendance": { "pending": 4, "present_today": 12 },
   "content":    { "published_projects": 6, "draft_projects": 1, "published_services": 8, "draft_services": 0,
                   "published_campaigns": 4, "active_campaigns": 2 },
   "recent_activity": [

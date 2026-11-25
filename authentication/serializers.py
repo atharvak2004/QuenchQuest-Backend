@@ -189,3 +189,12 @@ class ChangePasswordSerializer(serializers.Serializer):
         if attrs["old_password"] == attrs["new_password"]:
             raise serializers.ValidationError({"new_password": "Choose a different password."})
         return attrs
+
+
+class GoogleLoginRequestSerializer(serializers.Serializer):
+    credential = serializers.CharField()
+
+
+class GoogleLoginResponseSerializer(LoginResponseSerializer):
+    created = serializers.BooleanField()
+    profile_complete = serializers.BooleanField()

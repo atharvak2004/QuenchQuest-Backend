@@ -176,6 +176,90 @@ localStorage.setItem("userType", "volunteer");
 GET **200** `{ "id", "volunteer_id", "name", "email", "phone", "gender", "skills", "location", "availability", "is_verified", "created_at" }`
 PATCH any of `name, phone, gender, skills, location, availability`. `email` can't be changed here. `gender` is `male` | `female` | `other` | `prefer_not_to_say`.
 
+### Sign in with Google — `POST /api/auth/google/` (public)
+Body: `{ "credential": "<ID token from the Google button's callback>" }`.
+
+**200** for an existing account, **201** when a new one was created:
+```json
+{ "message": "Login successful.", "user": { "id": 5, "volunteer_id": "QQ005", "name": "...", "email": "...", "phone": "", "gender": null,
+  "skills": null, "location": null, "availability": null, "is_verified": true },
+  "token": "...", "refresh": "...", "created": false, "profile_complete": false }
+```
+- The first sign-in creates a verified volunteer from the Google name and email, and emails them their Volunteer ID.
+- If someone already registered with that email, the Google account is linked to it, and the email counts as verified.
+- `profile_complete` is `false` until `phone` and `skills` are filled in. Use it to show the "finish your profile" banner.
+- Google-only accounts have no password. They can set one with Forgot password.
+
+Errors:
+- **501**: `GOOGLE_CLIENT_ID` isn't set on the backend (the "not switched on yet" message)
+- **401**: invalid or expired Google token
+- **403**: the account has been deactivated
+- **409**: the email is already linked to a different Google account
+- **503**: Google couldn't be reached
+
+The backend's `GOOGLE_CLIENT_ID` must be the **same** OAuth web client ID as the website's `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, otherwise every token is rejected.
+
+### Projects and attendance (volunteer token)
+
+| Call | Purpose |
+|---|---|
+| `POST /api/projects/{id}/join/` | Join. **201** the first time, **200** if already on the project |
+| `DELETE /api/projects/{id}/join/` | Leave |
+| `GET /api/auth/me/projects/` *(paginated)* | Projects I'm on |
+| `POST /api/projects/{id}/attendance/` | Mark today's attendance |
+| `GET /api/auth/me/attendance/` *(paginated)* | My attendance history, newest first. Filter with `?project=<id>` |
+| `GET /api/auth/me/summary/` | `{ projects, campaigns, attendance_days, pending_attendance, total_donated, certificates }` for the dashboard totals. `total_donated` is a string such as `"300.00"` |
+
+**Joining.** Join and leave return `{ "message", "has_joined", "volunteer_count" }`.
+- A project can be joined when `allow_volunteers` is true and `status` is `active` or `concept` ("starting soon"). Otherwise you get **400**.
+- Drafts and archived projects return **404**.
+- For the form's dropdown, use `GET /api/website/projects/?joinable=true`.
+
+**My projects.** Each item has:
+- `id`, `title`, `slug`, `status`, `summary`
+- the location: `location_name`, `latitude`, `longitude` (strings or `null`)
+- `service_title`, `cover_image_web`, `cover_image_alt`, `start_date`, `end_date`
+- `joined_at`, and `joined_by`: `"self"` (joined from the website) or `"staff"` (added by the team)
+- `can_mark_attendance` and `days_attended`
+
+**Attendance.** One record per volunteer, project and day. You must have joined the project first (**403** otherwise), and its status must be `active` or `concept`.
+- **Staff code:** JSON `{ "code": "K7P2QX" }`, in any letter case. It's approved at once. A wrong or expired code returns **400**, and after 5 wrong codes there's a 15-minute pause (**429**).
+- **Photo:** multipart `photo` (JPEG, PNG or WebP, up to 5 MB), plus optional `latitude` and `longitude` (send both or neither). It's saved as `pending` until staff approve it. The photo is re-encoded, which strips its location metadata.
+- Once you're approved for today, another try returns **400**.
+- While a photo is pending, a second photo returns **400**, but a staff code still approves the day.
+- A `rejected` day can be sent again. `review_note` says why it was rejected.
+
+Each response is an `Attendance` record: `{ "id", "project", "project_title", "date", "method": "code"|"photo", "status": "approved"|"pending"|"rejected", "review_note", "created_at" }`. It's **201** when created, or **200** when it replaced a rejected or pending record for today.
+
+### My certificates (volunteer token)
+
+After an event, staff issue a certificate of appreciation to every volunteer who was present, meaning they have approved attendance on the project.
+
+| Call | Purpose |
+|---|---|
+| `GET /api/auth/me/certificates/` *(paginated)* | My certificates |
+| `GET /api/certificates/{certificate_id}/download/?type=png` | Download one (`type=pdf` for a PDF). **403** if revoked, **404** if it isn't yours |
+
+Each certificate has:
+- `certificate_id`, `volunteer_name`, `date`, `days_attended`, `issued_at`
+- the project: `project`, `project_title`, `project_slug`
+- `status`: `valid` or `revoked`
+- `download_url` and `pdf_url` (both `null` when revoked)
+- `verify_url`, the public link the QR code opens
+
+Related fields elsewhere:
+- `GET /api/auth/me/projects/` items have `certificates_enabled` and `certificate_id` (`null` until issued), so a project card can show "Download certificate".
+- `GET /api/auth/me/summary/` includes `certificates`, the number of valid ones.
+- Public project cards include `certificates_enabled`, for a line such as "Volunteers who attend receive a certificate".
+
+The download needs the auth header, so fetch it as a blob instead of using a plain link:
+```js
+const res = await api.get(cert.download_url, { responseType: "blob" });   // or cert.pdf_url
+const url = URL.createObjectURL(res.data);
+Object.assign(document.createElement("a"), { href: url, download: `QuenchQuest-Certificate-${cert.certificate_id}.png` }).click();
+URL.revokeObjectURL(url);
+```
+
 ### Forgot password — `POST /api/auth/forgot-password/` (public)
 `{ "email": "riya@example.com" }` → **200** `{ "message": "OTP sent successfully." }` · **404** if not registered
 
@@ -309,7 +393,7 @@ Lists marked *paginated* return `{ count, next, previous, results }` and accept 
 |---|---|
 | `GET /api/website/services/` *(paginated)* | Services in display order. `?show_on_home=true` for the home grid |
 | `GET /api/website/services/{slug}/` | One service |
-| `GET /api/website/projects/` *(paginated)* | Project cards. Filters: `?service=<slug or id>`, `?status=concept\|active\|completed\|paused`, `?featured=true` (home cards, in order), `?search=` |
+| `GET /api/website/projects/` *(paginated)* | Project cards. Filters: `?service=<slug or id>`, `?status=` (one status, or several comma-separated, e.g. `active,concept`), `?joinable=true` (volunteers can join now), `?featured=true` (home cards, in order), `?search=`. Each card includes `allow_volunteers`, `service_title` and `has_joined` (`null` without a volunteer token) |
 | `GET /api/website/projects/{slug}/` | Full project brief: activities, phases, indicators, safeguards, gallery |
 | `GET /api/website/projects/map/` | Map pins `[ { id, title, slug, status, service, location_name, latitude, longitude } ]` (not paginated) |
 | `GET /api/website/stats/` | `{ volunteers, services, projects, people_benefited, communities_reached }` for the hero stats |
@@ -365,6 +449,31 @@ const join = (id) => api.post(`/api/campaigns/${id}/join/`).then((r) => r.data);
 const leave = (id) => api.delete(`/api/campaigns/${id}/join/`).then((r) => r.data);
 ```
 
+### Certificate verification page — `/verify` (website page, public)
+
+Every certificate has a QR code. Scanning it opens **`{CERTIFICATE_VERIFY_URL}?id=QQ-7K3P-9XRM`**. The default is `https://quenchquestsocialfoundation.org/verify`, which is set in the backend `.env`, so the website needs a **`/verify`** page. The page should:
+
+1. Show a "Certificate ID" box. If the URL has `?id=`, fill the box with it and check the ID straight away.
+2. Check it with **`GET /api/website/certificates/verify/{certificate_id}/`** (no token).
+3. Show the result.
+
+The lookup accepts the ID in any letter case, with or without the dashes or with spaces, so `qq7k3p9xrm` works too. Escape it with `encodeURIComponent` when building the URL.
+
+**200** for a genuine certificate:
+```json
+{ "valid": true, "status": "valid", "certificate_id": "QQ-7K3P-9XRM", "volunteer_name": "Riya Patil",
+  "project_title": "Clean Water Kolhapur", "project_slug": "clean-water-kolhapur", "date": "2026-11-22",
+  "issued_at": "2026-11-24T10:15:00+05:30", "revoked_at": null,
+  "message": "This certificate is genuine and was issued by QuenchQuest Social Foundation." }
+```
+
+Other results:
+- **200** with `"valid": false, "status": "revoked"` and a message: the certificate was withdrawn. Show it clearly as **not valid**.
+- **404** `{ "valid": false, "Error": "No certificate was found with this ID..." }`: the ID doesn't exist.
+- **429**: too many checks from the same visitor (30 a minute). Ask them to wait a moment.
+
+Show the volunteer's name, the project (link to `/projects/{project_slug}` when it isn't `null`) and the date. The response never includes emails or other personal details.
+
 ### User search — `GET /api/website/users/?search=riy` (**token required**, volunteer or admin)
 **200** `{ "count": 2, "returned": 2, "results": [ { "id", "name", "email", "volunteer_id" } ] }`
 
@@ -382,6 +491,8 @@ Logged-in volunteer (only `user` + `message`; use the volunteer's numeric `id`):
 { "user": 5, "message": "I want to help." }
 ```
 **201** `{ "message": "Message sent successfully." }` · **400** `{ "Error": "Message is required." }` / `"All fields are required."`
+
+Either form can add `"project": <id>` (the volunteer form's "Project you'd like to join"). It must be a published project, or you get **400** `{ "Error": "Project not found." }`. The inbox shows which project the message is about.
 
 Take `user` from `user.id` in the login response, or from `GET /api/auth/me/`. Messages land in the admin panel inbox.
 

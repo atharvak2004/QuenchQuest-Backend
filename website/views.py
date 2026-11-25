@@ -185,8 +185,10 @@ class UserQuerySearchAPI(APIView):
 # Admin-managed content (public, read-only)
 # ---------------------------------------------------------------------------
 
-from django.db.models import Sum
+from django.db.models import Exists, OuterRef, Sum
 from rest_framework import viewsets
+
+from authentication.jwt_auth import OptionalVolunteerAuthentication
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.filters import OrderingFilter, SearchFilter
@@ -260,6 +262,7 @@ class PublicProjectViewSet(PublicSlugDetailMixin, viewsets.ReadOnlyModelViewSet)
 
     queryset = Project.objects.all()
     slug_type = "project"
+    authentication_classes = [OptionalVolunteerAuthentication]
     filter_backends = [SearchFilter, OrderingFilter]
     search_fields = ["title", "summary", "location_name"]
     ordering_fields = ["display_order", "start_date", "created_at"]
@@ -267,14 +270,30 @@ class PublicProjectViewSet(PublicSlugDetailMixin, viewsets.ReadOnlyModelViewSet)
     def get_serializer_class(self):
         return ProjectDetailPublicSerializer if self.action == "retrieve" else ProjectCardPublicSerializer
 
+    def volunteer(self):
+        user = getattr(self.request, "user", None)
+        return user if isinstance(user, User) else None
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["volunteer"] = self.volunteer()
+        return context
+
     def get_queryset(self):
         qs = self.published().select_related("service").prefetch_related("gallery")
+        volunteer = self.volunteer()
+        if volunteer is not None:
+            qs = qs.annotate(joined_flag=Exists(
+                ProjectVolunteer.objects.filter(project=OuterRef("pk"), volunteer=volunteer)
+            ))
         params = self.request.query_params
         service = params.get("service")
         if service:
             qs = qs.filter(service_id=service) if service.isdigit() else qs.filter(service__slug=service)
-        if params.get("status"):
-            qs = qs.filter(status=params["status"])
+        if params.get("status"):  # one status, or several: ?status=active,concept
+            qs = qs.filter(status__in=[s.strip() for s in params["status"].split(",") if s.strip()])
+        if params.get("joinable") in ("1", "true"):
+            qs = qs.filter(allow_volunteers=True, status__in=Project.JOINABLE_STATUSES)
         if params.get("featured") in ("1", "true"):
             return qs.filter(is_featured=True).order_by("featured_order", "id")
         return qs.order_by("display_order", "-created_at")

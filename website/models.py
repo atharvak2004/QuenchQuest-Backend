@@ -241,6 +241,19 @@ class Project(SluggedContentModel):
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     show_on_map = models.BooleanField(default=True)
+    # Shows "Volunteer on This Project"; joining also needs status concept/active.
+    allow_volunteers = models.BooleanField(default=True)
+
+    # Certificates for volunteers who attended (issued by staff after the event)
+    certificates_enabled = models.BooleanField(default=False)
+    certificate_template = models.ImageField(
+        upload_to="certificates/templates/", blank=True,
+        help_text="Optional. Empty = the built-in QuenchQuest certificate design.",
+    )
+    certificate_layout = models.JSONField(
+        default=dict, blank=True,
+        help_text="Optional overrides for where the name, project, date, ID and QR code go.",
+    )
 
     challenge = models.TextField(blank=True)
     objective = models.TextField(blank=True)
@@ -266,16 +279,39 @@ class Project(SluggedContentModel):
     share_image = models.ImageField(upload_to="projects/share/", blank=True)
 
     volunteers = models.ManyToManyField(
-        "authentication.User", blank=True, related_name="projects"
+        "authentication.User", through="ProjectVolunteer", blank=True, related_name="projects"
     )
 
     MAX_FEATURED = 3
+    JOINABLE_STATUSES = ("concept", "active")
 
     class Meta:
         ordering = ["display_order", "-created_at"]
 
     def __str__(self):
         return self.title
+
+
+class ProjectVolunteer(models.Model):
+    """A volunteer on a project: joined from the website, or added by staff."""
+
+    JOINED_BY_CHOICES = [("self", "Joined from the website"), ("staff", "Added by staff")]
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="memberships")
+    # db_column keeps the table the plain many-to-many used before this model existed.
+    volunteer = models.ForeignKey(
+        "authentication.User", on_delete=models.CASCADE, db_column="user_id",
+        related_name="project_memberships",
+    )
+    joined_by = models.CharField(max_length=10, choices=JOINED_BY_CHOICES, default="staff")
+    joined_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "website_project_volunteers"
+        unique_together = ("project", "volunteer")
+
+    def __str__(self):
+        return f"{self.volunteer} on {self.project}"
 
 
 class ProjectImage(models.Model):

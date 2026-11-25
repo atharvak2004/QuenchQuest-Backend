@@ -1,6 +1,7 @@
 from django.urls import path
 from rest_framework.routers import SimpleRouter
 from dashboard.campaign_views import PublicCampaignViewSet
+from volunteering.certificate_views import CertificateVerifyAPIView
 from .views import *
 from .views import UserPathSearchAPI
 from .views import UserQuerySearchAPI
@@ -13,6 +14,7 @@ urlpatterns = [
     path("users/", UserQuerySearchAPI.as_view()),
     path("settings/", PublicSiteSettingsAPI.as_view(), name="site-settings"),
     path("stats/", PublicStatsAPI.as_view(), name="site-stats"),
+    path("certificates/verify/<str:certificate_id>/", CertificateVerifyAPIView.as_view(), name="certificate-verify"),
 ]
 
 router = SimpleRouter()

@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 # from django.conf import settings
 import os
+import sys
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -72,6 +73,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'dashboard',
     'adminpanel',
+    'volunteering',
 ]
 
 REST_FRAMEWORK = {
@@ -79,6 +81,10 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'authentication.sisuser_jwt_auth.SisUserJWTAuthentication',
     ],
+    # Only views that opt in are throttled (e.g. public certificate checks).
+    'DEFAULT_THROTTLE_RATES': {
+        'certificate-verify': '30/minute',
+    },
 }
 
 SPECTACULAR_SETTINGS = {
@@ -106,6 +112,8 @@ SPECTACULAR_SETTINGS = {
         "ProjectStatusEnum": "website.models.Project.STATUS_CHOICES",
         "ContactStatusEnum": "contact.models.Contact.STATUS_CHOICES",
         "CampaignStatusEnum": "dashboard.models.Campaign.STATUS_CHOICES",
+        "AttendanceStatusEnum": "volunteering.models.Attendance.STATUS_CHOICES",
+        "CertificateStatusEnum": "volunteering.models.Certificate.STATUS_CHOICES",
         "BeneficiaryStatusEnum": [("pending", "Pending"), ("approved", "Approved"), ("helped", "Helped")],
     },
     
@@ -199,11 +207,17 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_ROOT = Path(os.getenv("STATIC_ROOT", BASE_DIR / 'staticfiles'))
 
-# Uploaded files (e.g. Leadership images)
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# Uploaded files (images, certificates). On the server keep them outside the git
+# checkout (MEDIA_ROOT=/var/lib/quenchquest-api/media). MEDIA_URL may be a full
+# URL (http://<server>:8081/media/) so image links stay right even when the
+# website fetches the API through 127.0.0.1.
+MEDIA_URL = os.getenv("MEDIA_URL", "/media/")
+MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", BASE_DIR / 'media'))
+
+# Behind Nginx: trust its X-Forwarded-Proto so links are https:// once HTTPS is on.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -214,6 +228,20 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 JWT_ACCESS_HOURS = int(os.getenv("JWT_ACCESS_HOURS", "24"))
 JWT_REFRESH_DAYS = int(os.getenv("JWT_REFRESH_DAYS", "30"))
 
+# Sign in with Google: the OAuth web client ID (same value as the website's
+# NEXT_PUBLIC_GOOGLE_CLIENT_ID). Empty = POST /api/auth/google/ answers 501.
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+
+# Volunteer certificates. The QR code on each certificate opens this website page
+# with ?id=<certificate id>; the page checks it with /api/website/certificates/verify/.
+CERTIFICATE_VERIFY_URL = os.getenv(
+    "CERTIFICATE_VERIFY_URL", "https://quenchquestsocialfoundation.org/verify"
+).rstrip("/")
+# Optional .ttf paths; otherwise Georgia / DejaVu Serif / Liberation Serif are used if installed.
+CERTIFICATE_FONT = os.getenv("CERTIFICATE_FONT", "")
+CERTIFICATE_FONT_BOLD = os.getenv("CERTIFICATE_FONT_BOLD", "")
+MAX_CERTIFICATE_TEMPLATE_MB = 15
+
 # Image uploads (admin panel)
 MAX_IMAGE_UPLOAD_MB = 5
 IMAGE_WEB_MAX_PX = 1600
@@ -222,6 +250,10 @@ IMAGE_WEB_MAX_PX = 1600
 # the header `X-Revalidate-Secret`. Leave empty to disable.
 WEBSITE_REVALIDATE_URL = os.getenv("WEBSITE_REVALIDATE_URL", "")
 WEBSITE_REVALIDATE_SECRET = os.getenv("WEBSITE_REVALIDATE_SECRET", "")
+
+# Never call the real website from `manage.py test` (tests that need the hook set it themselves).
+if len(sys.argv) > 1 and sys.argv[1] == "test":
+    WEBSITE_REVALIDATE_URL = ""
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 

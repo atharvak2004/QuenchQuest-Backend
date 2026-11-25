@@ -72,14 +72,24 @@ class PeopleBenefitedMixin(serializers.Serializer):
 
 class ProjectCardPublicSerializer(PeopleBenefitedMixin, serializers.ModelSerializer):
     service = ServiceRefSerializer(read_only=True)
+    service_title = serializers.CharField(source="service.title", read_only=True, default=None)
+    has_joined = serializers.SerializerMethodField()
+
+    def get_has_joined(self, obj) -> bool | None:
+        """null without a volunteer token."""
+        volunteer = self.context.get("volunteer")
+        if volunteer is None:
+            return None
+        flag = getattr(obj, "joined_flag", None)
+        return flag if flag is not None else obj.memberships.filter(volunteer=volunteer).exists()
 
     class Meta:
         model = Project
         fields = [
-            "id", "title", "slug", "service", "status", "summary",
+            "id", "title", "slug", "service", "service_title", "status", "summary",
             "cover_image", "cover_image_web", "cover_image_alt", "location_name",
             "is_featured", "featured_order", "people_benefited", "people_benefited_verified",
-            "start_date", "end_date",
+            "start_date", "end_date", "allow_volunteers", "has_joined", "certificates_enabled",
         ]
 
 

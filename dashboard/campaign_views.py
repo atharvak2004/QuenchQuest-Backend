@@ -1,14 +1,12 @@
 """Public campaign pages and the volunteer join/leave endpoints."""
 from django.db.models import OuterRef, Subquery
-from drf_spectacular.extensions import OpenApiAuthenticationExtension
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import generics, status, viewsets
-from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adminpanel.pagination import StandardPagination
-from authentication.jwt_auth import UserJWTAuthentication
+from authentication.jwt_auth import OptionalVolunteerAuthentication, UserJWTAuthentication
 from authentication.models import User
 from authentication.permissions import IsVolunteer
 from website.views import PublicSlugDetailMixin
@@ -16,28 +14,6 @@ from website.views import PublicSlugDetailMixin
 from .campaign_stats import with_stats
 from .models import Campaign, CampaignVolunteer
 from .serializers import CampaignPublicSerializer, JoinResponseSerializer, MyCampaignSerializer
-
-
-class OptionalVolunteerAuthentication(UserJWTAuthentication):
-    """Use a volunteer token when it's valid; otherwise treat the request as anonymous.
-
-    Public pages must never fail because the browser still holds an expired token.
-    """
-
-    def authenticate(self, request):
-        try:
-            return super().authenticate(request)
-        except AuthenticationFailed:
-            return None
-
-
-class OptionalVolunteerAuthenticationScheme(OpenApiAuthenticationExtension):
-    target_class = OptionalVolunteerAuthentication
-    name = "OptionalVolunteerBearerAuth"
-
-    def get_security_definition(self, auto_schema):
-        return {"type": "http", "scheme": "bearer", "bearerFormat": "JWT",
-                "description": "Optional volunteer token; adds has_joined and my_donation_total."}
 
 
 def public_campaigns():

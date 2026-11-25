@@ -579,6 +579,29 @@ class StaffSecurityTests(AdminAPITestBase):
         self.assertEqual(login["modules"], ["content"])
         self.assertIn("refresh", login)
 
+    def test_module_access_is_optional_and_nullable(self):
+        self.login(self.admin)
+        base = {"password": "Staffer1234", "choice": "employee_role"}
+        omitted = self.client.post("/api/admin/staff/", {**base, "username": "s1", "email": "s1@example.com"}, format="json")
+        self.assertEqual(omitted.status_code, 201, omitted.content)
+        self.assertEqual(omitted.json()["module_access"], [])
+        self.assertEqual(omitted.json()["modules"], ["campaigns", "content", "inbox", "volunteers"])
+
+        null = self.client.post("/api/admin/staff/", {**base, "username": "s2", "email": "s2@example.com",
+                                                      "module_access": None}, format="json")
+        self.assertEqual(null.status_code, 201, null.content)
+        self.assertEqual(null.json()["module_access"], [])
+
+        url = f"/api/admin/staff/{null.json()['id']}/"
+        narrowed = self.client.patch(url, {"module_access": ["inbox"]}, format="json")
+        self.assertEqual(narrowed.json()["modules"], ["inbox"])
+        cleared = self.client.patch(url, {"module_access": None}, format="json")
+        self.assertEqual(cleared.status_code, 200, cleared.content)
+        self.assertEqual(cleared.json()["modules"], ["campaigns", "content", "inbox", "volunteers"])
+
+        bad = self.client.patch(url, {"module_access": ["everything"]}, format="json")
+        self.assertEqual(bad.status_code, 400)
+
     def test_admin_cannot_deactivate_self_or_drop_own_role(self):
         self.login(self.admin)
         self.assertEqual(self.client.delete(f"/api/admin/staff/{self.admin.pk}/").status_code, 400)

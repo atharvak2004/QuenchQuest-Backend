@@ -25,6 +25,8 @@ from website.models import (
     MediaAsset, OurImpact, Page, Project, ProjectImage, Service, SiteSettings,
 )
 
+from volunteering.models import Attendance
+
 from .csv_export import csv_response
 from .images import process_image
 from .mixins import (
@@ -357,7 +359,7 @@ class ContactViewSet(StaffViewSet):
 
     module = "inbox"
     http_method_names = ["get", "post", "patch", "head", "options"]
-    queryset = Contact.objects.select_related("user", "assigned_to").prefetch_related("notes__author")
+    queryset = Contact.objects.select_related("user", "assigned_to", "project").prefetch_related("notes__author")
     serializer_class = ContactAdminSerializer
     search_fields = ["name", "email", "message", "user__name", "user__email"]
     ordering_fields = ["created_at", "updated_at", "status"]
@@ -372,6 +374,8 @@ class ContactViewSet(StaffViewSet):
         params = self.request.query_params
         if params.get("status"):
             qs = qs.filter(status=params["status"])
+        if params.get("project"):
+            qs = qs.filter(project_id=params["project"])
         assigned = params.get("assigned_to")
         if assigned == "me":
             qs = qs.filter(assigned_to=self.request.user)
@@ -403,13 +407,14 @@ class ContactViewSet(StaffViewSet):
                 c.user.email if c.user else c.email,
                 c.user.phone if c.user else c.contact,
                 c.address, c.message,
+                c.project.title if c.project else "",
                 c.assigned_to.username if c.assigned_to else "",
             ]
             for c in self.filter_queryset(self.get_queryset())
         )
         return csv_response(
             "messages",
-            ["id", "received", "status", "name", "email", "phone", "address", "message", "assigned_to"],
+            ["id", "received", "status", "name", "email", "phone", "address", "message", "project", "assigned_to"],
             rows,
         )
 
@@ -682,6 +687,7 @@ class DashboardHomeView(APIView):
         responses=inline_serializer("DashboardHome", {
             "volunteers": drf_serializers.DictField(),
             "messages": drf_serializers.DictField(),
+            "attendance": drf_serializers.DictField(),
             "content": drf_serializers.DictField(),
             "recent_activity": drf_serializers.ListField(child=drf_serializers.DictField()),
         }),
@@ -739,6 +745,10 @@ class DashboardHomeView(APIView):
                 "active_campaigns": Campaign.objects.filter(
                     status="active", is_published=True, is_archived=False
                 ).count(),
+            },
+            "attendance": {
+                "pending": Attendance.objects.filter(status="pending").count(),
+                "present_today": Attendance.objects.filter(status="approved", date=timezone.localdate()).count(),
             },
             "recent_activity": activity[:15],
         })

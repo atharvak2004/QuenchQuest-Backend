@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import ProtectedError
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
@@ -89,7 +90,13 @@ class ContentViewSet(StaffViewSet):
             return Response(
                 {"message": "Archived. Restore it, or delete again to remove it permanently.", "archived": True}
             )
-        obj.delete()
+        try:
+            obj.delete()
+        except ProtectedError:
+            return Response(
+                {"Error": "This can't be deleted because certificates were issued for it. It stays archived."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return Response({"message": "Deleted permanently.", "archived": False})
 
     @extend_schema(request=None, summary="Restore an archived item")

@@ -1,6 +1,8 @@
 from django.urls import path
 from .views import *
 from dashboard.campaign_views import MyCampaignsAPIView
+from volunteering.certificate_views import MyCertificatesAPIView
+from volunteering.views import MyAttendanceAPIView, MyProjectsAPIView, MySummaryAPIView
 
 urlpatterns = [
     path("register/", RegisterAPI.as_view()),
@@ -17,6 +19,11 @@ urlpatterns = [
     path("token/refresh/", TokenRefreshAPIView.as_view(), name="token-refresh"),
     path("me/", MeAPIView.as_view(), name="me"),
     path("me/campaigns/", MyCampaignsAPIView.as_view(), name="my-campaigns"),
+    path("me/projects/", MyProjectsAPIView.as_view(), name="my-projects"),
+    path("me/attendance/", MyAttendanceAPIView.as_view(), name="my-attendance"),
+    path("me/summary/", MySummaryAPIView.as_view(), name="my-summary"),
+    path("me/certificates/", MyCertificatesAPIView.as_view(), name="my-certificates"),
+    path("google/", GoogleLoginAPIView.as_view(), name="google-login"),
     path("resend-otp/", ResendOTPAPIView.as_view(), name="resend-otp"),
     path("sisuser/change-password/", ChangePasswordAPIView.as_view(), name="change-password"),
 

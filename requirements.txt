@@ -4,6 +4,7 @@ Django==5.2.14
 django-cors-headers==4.9.0
 djangorestframework==3.17.1
 djangorestframework_simplejwt==5.5.1
+gunicorn==23.0.0
 drf-spectacular==0.29.0
 inflection==0.5.1
 jsonschema==4.26.0
@@ -16,6 +17,7 @@ python-dotenv==1.2.2
 PyYAML==6.0.3
 referencing==0.37.0
 rpds-py==0.30.0
+segno==1.6.6
 sqlparse==0.5.5
 typing_extensions==4.15.0
 tzdata==2026.2

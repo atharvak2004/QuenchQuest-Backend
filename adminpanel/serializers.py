@@ -87,11 +87,14 @@ class ProjectAdminSerializer(AuditMixin, serializers.ModelSerializer):
     gallery = ProjectImageSerializer(many=True, read_only=True)
     service_title = serializers.CharField(source="service.title", read_only=True, default=None)
     volunteer_count = serializers.IntegerField(source="volunteers.count", read_only=True)
+    certificate_count = serializers.IntegerField(source="certificates.count", read_only=True)
 
     class Meta:
         model = Project
         exclude = ["volunteers"]
-        read_only_fields = AUDIT_READ_ONLY + ["cover_image", "cover_image_web", "share_image"]
+        read_only_fields = AUDIT_READ_ONLY + [
+            "cover_image", "cover_image_web", "share_image", "certificate_template", "certificate_layout",
+        ]
         extra_kwargs = {"slug": {"required": False}}
 
     def validate_activities(self, value):
@@ -246,15 +249,17 @@ class ContactAdminSerializer(serializers.ModelSerializer):
     is_registered = serializers.SerializerMethodField()
     assigned_to_name = serializers.CharField(source="assigned_to.username", read_only=True, default=None)
     notes = ContactNoteSerializer(many=True, read_only=True)
+    project_title = serializers.CharField(source="project.title", read_only=True, default=None)
+    project_slug = serializers.CharField(source="project.slug", read_only=True, default=None)
 
     class Meta:
         model = Contact
         fields = [
             "id", "user", "is_registered", "sender_name", "sender_email", "sender_phone",
-            "address", "message", "status", "assigned_to", "assigned_to_name", "notes",
-            "created_at", "updated_at",
+            "address", "message", "project", "project_title", "project_slug",
+            "status", "assigned_to", "assigned_to_name", "notes", "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "user", "address", "message", "created_at", "updated_at"]
+        read_only_fields = ["id", "user", "address", "message", "project", "created_at", "updated_at"]
 
     def get_is_registered(self, obj) -> bool:
         return obj.user_id is not None
@@ -280,12 +285,16 @@ class ContactAdminSerializer(serializers.ModelSerializer):
 
 class VolunteerAdminSerializer(serializers.ModelSerializer):
     project_ids = serializers.PrimaryKeyRelatedField(source="projects", many=True, read_only=True)
+    signs_in_with_google = serializers.SerializerMethodField()
+
+    def get_signs_in_with_google(self, obj) -> bool:
+        return bool(obj.google_sub)
 
     class Meta:
         model = User
         fields = [
             "id", "volunteer_id", "name", "email", "phone", "gender", "skills", "location",
-            "availability", "is_verified", "is_active", "created_at", "project_ids",
+            "availability", "is_verified", "is_active", "created_at", "project_ids", "signs_in_with_google",
         ]
         read_only_fields = ["id", "volunteer_id", "created_at", "project_ids"]
 
@@ -293,6 +302,10 @@ class VolunteerAdminSerializer(serializers.ModelSerializer):
 class StaffSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, min_length=8)
     modules = serializers.SerializerMethodField()
+    # Optional: leave it out, or send null / [], to use the role's default modules.
+    module_access = serializers.ListField(
+        child=serializers.CharField(), required=False, allow_null=True, allow_empty=True,
+    )
 
     class Meta:
         model = SisUser
@@ -309,7 +322,9 @@ class StaffSerializer(serializers.ModelSerializer):
         return sorted(obj.modules)
 
     def validate_module_access(self, value):
-        if not isinstance(value, list) or any(m not in SisUser.MODULES for m in value):
+        if value is None:  # "no override": the role's default modules apply
+            return []
+        if any(m not in SisUser.MODULES for m in value):
             raise serializers.ValidationError(f"Use a list from: {', '.join(SisUser.MODULES)}.")
         return sorted(set(value))
 

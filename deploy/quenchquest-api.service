@@ -1,0 +1,42 @@
+# systemd service for the QuenchQuest Django API (gunicorn on a Unix socket).
+# Install:
+#   sudo cp deploy/quenchquest-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now quenchquest-api
+#
+# Settings come from /var/www/quenchquest-api/.env (read by project/settings.py).
+# A Unix socket needs no TCP port, so it can't clash with other apps on the server.
+[Unit]
+Description=QuenchQuest API (Django + gunicorn)
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=qqapi
+# Group www-data so Nginx can use the socket and read uploaded media
+Group=www-data
+WorkingDirectory=/var/www/quenchquest-api
+RuntimeDirectory=quenchquest-api
+RuntimeDirectoryMode=0750
+UMask=0007
+ExecStart=/var/www/quenchquest-api/.venv/bin/gunicorn project.wsgi:application \
+    --bind unix:/run/quenchquest-api/gunicorn.sock \
+    --workers 2 --threads 2 --timeout 60 \
+    --max-requests 1000 --max-requests-jitter 100 \
+    --access-logfile - --error-logfile -
+# `systemctl reload quenchquest-api` swaps in new code without dropping requests
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=3
+KillMode=mixed
+TimeoutStopSec=20
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/quenchquest-api
+
+[Install]
+WantedBy=multi-user.target

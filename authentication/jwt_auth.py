@@ -30,3 +30,16 @@ class UserJWTAuthentication(BaseAuthentication):
 
     def authenticate_header(self, request):
         return "Bearer"
+
+
+class OptionalVolunteerAuthentication(UserJWTAuthentication):
+    """Use a volunteer token when it's valid; otherwise treat the request as anonymous.
+
+    Public pages must never fail because the browser still holds an expired token.
+    """
+
+    def authenticate(self, request):
+        try:
+            return super().authenticate(request)
+        except AuthenticationFailed:
+            return None

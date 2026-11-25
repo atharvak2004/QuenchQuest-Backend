@@ -67,12 +67,18 @@ class ServiceAdmin(admin.ModelAdmin):
     ordering = ("display_order",)
 
 
+class ProjectVolunteerInline(admin.TabularInline):
+    model = ProjectVolunteer
+    extra = 0
+    raw_id_fields = ("volunteer",)
+
+
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
     list_display = ("id", "title", "service", "status", "is_published", "is_featured", "is_archived")
     list_filter = ("status", "is_published", "is_featured", "is_archived", "service")
     search_fields = ("title", "slug", "location_name")
-    filter_horizontal = ("volunteers",)
+    inlines = [ProjectVolunteerInline]
 
 
 admin.site.register(ProjectImage)

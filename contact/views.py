@@ -6,6 +6,7 @@ from authentication.models import User
 from .models import Contact
 from .serializers import ContactSerializer
 from drf_spectacular.utils import extend_schema
+from website.models import Project
 
 
 class ContactAPI(APIView):
@@ -18,6 +19,15 @@ class ContactAPI(APIView):
 
         user_id = request.data.get("user")
         message = request.data.get("message")
+
+        project = None
+        project_id = request.data.get("project")
+        if project_id not in (None, ""):
+            project = Project.objects.filter(
+                pk=project_id if str(project_id).isdigit() else 0, is_published=True, is_archived=False
+            ).first()
+            if not project:
+                return Response({"Error": "Project not found."}, status=status.HTTP_400_BAD_REQUEST)
 
         # message is ALWAYS required
         if not message:
@@ -35,7 +45,8 @@ class ContactAPI(APIView):
 
                 Contact.objects.create(
                     user=user,
-                    message=message
+                    message=message,
+                    project=project,
                 )
 
                 return Response(
@@ -68,7 +79,8 @@ class ContactAPI(APIView):
                 contact=contact,
                 email=email,
                 address=address,
-                message=message
+                message=message,
+                project=project,
             )
 
             return Response(

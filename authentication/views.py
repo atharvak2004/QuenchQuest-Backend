@@ -785,3 +785,118 @@ class ChangePasswordAPIView(APIView):
         request.user.save(update_fields=["password"])
         # Old tokens stop working; hand back fresh ones so this session continues.
         return Response({"message": "Password changed.", **issue_tokens(request.user)})
+
+
+# ---------------------------------------------------------------------------
+# Sign in with Google
+# ---------------------------------------------------------------------------
+
+from .google import GoogleTokenError, GoogleUnavailable, verify_credential
+
+
+def volunteer_login_payload(user):
+    return {
+        "id": user.id,
+        "volunteer_id": user.volunteer_id,
+        "name": user.name,
+        "email": user.email,
+        "phone": user.phone,
+        "gender": user.gender,
+        "skills": user.skills,
+        "location": user.location,
+        "availability": user.availability,
+        "is_verified": user.is_verified,
+    }
+
+
+class GoogleLoginAPIView(APIView):
+    """Exchange a Google ID token for QuenchQuest tokens. Creates the volunteer on first use."""
+
+    authentication_classes = []
+    permission_classes = []
+
+    def get_authenticate_header(self, request):
+        return "Bearer"
+
+    @extend_schema(
+        summary="Sign in with Google",
+        description=(
+            "Body {\"credential\": \"<Google ID token>\"}. Returns the same tokens as /api/auth/login/, "
+            "plus `created` (new account) and `profile_complete` (phone and skills filled in). "
+            "501 when GOOGLE_CLIENT_ID isn't set on the server."
+        ),
+        request=GoogleLoginRequestSerializer,
+        responses=GoogleLoginResponseSerializer,
+    )
+    def post(self, request):
+        if not settings.GOOGLE_CLIENT_ID:
+            return Response({"Error": "Google sign-in isn't switched on yet."},
+                            status=status.HTTP_501_NOT_IMPLEMENTED)
+
+        payload = GoogleLoginRequestSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        try:
+            claims = verify_credential(payload.validated_data["credential"])
+        except GoogleTokenError:
+            return Response({"Error": "Google sign-in failed. Please try again."},
+                            status=status.HTTP_401_UNAUTHORIZED)
+        except GoogleUnavailable:
+            return Response({"Error": "Couldn't reach Google. Please try again in a moment."},
+                            status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        sub, email = claims["sub"], claims["email"].strip().lower()
+        user = User.objects.filter(google_sub=sub).first()
+        created = False
+
+        if user is None:
+            user = User.objects.filter(email__iexact=email).first()
+            if user and user.google_sub and user.google_sub != sub:
+                return Response({"Error": "This email is linked to a different Google account."},
+                                status=status.HTTP_409_CONFLICT)
+
+        if user is None:
+            user = User(
+                name=(claims.get("name") or email.split("@")[0])[:100],
+                email=email,
+                password=make_password(None),  # no password until they set one via "Forgot password"
+                is_verified=True,
+                google_sub=sub,
+            )
+            user.save()
+            created = True
+            send_mail(
+                "Welcome to QuenchQuest",
+                f"Hello {user.name},\n\nWelcome to QuenchQuest! Your Volunteer ID is {user.volunteer_id}.\n\n"
+                "Please add your phone number and skills on your dashboard so the team can match you to projects.\n\n"
+                "Team QuenchQuest",
+                settings.EMAIL_HOST_USER,
+                [user.email],
+                fail_silently=True,
+            )
+        else:
+            if not user.is_active:
+                return Response({"Error": "This account has been deactivated. Please contact us."},
+                                status=status.HTTP_403_FORBIDDEN)
+            changed = []
+            if not user.google_sub:
+                user.google_sub = sub
+                changed.append("google_sub")
+            if not user.is_verified:  # Google has confirmed they own this email
+                user.is_verified = True
+                user.otp = None
+                changed += ["is_verified", "otp"]
+            if changed:
+                user.save(update_fields=changed)
+
+        tokens = issue_tokens(user)
+        return Response(
+            {
+                "message": "Account created." if created else "Login successful.",
+                "user": volunteer_login_payload(user),
+                "token": tokens["token"],
+                "refresh": tokens["refresh"],
+                "created": created,
+                "profile_complete": user.profile_complete,
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
