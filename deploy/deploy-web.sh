@@ -34,7 +34,7 @@ NODE_OPTIONS="--max-old-space-size=${BUILD_MEMORY_MB}" nice -n 19 ionice -c3 bas
 
 ARCHIVE="$(ls -1t release/quenchquest-web-*.tar.gz | head -1)"
 echo "→ Deploying $ARCHIVE on port $WEB_PORT"
-sudo PORT="$WEB_PORT" /usr/local/bin/qq-deploy "$ARCHIVE"
+sudo env PORT="$WEB_PORT" /usr/local/bin/qq-deploy "$ARCHIVE"
 
 # Keep the 3 newest archives in the checkout (qq-deploy keeps its own 5 releases)
 ls -1t release/quenchquest-web-*.tar.gz | tail -n +4 | xargs -r rm -f
