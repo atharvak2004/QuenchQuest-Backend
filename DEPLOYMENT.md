@@ -44,7 +44,7 @@ Before and after each reload, check that Kavya still answers:
 curl -s -o /dev/null -w "Kavya: %{http_code}\n" https://<KAVYA-DOMAIN>/
 ```
 
-**Build load:** building the website takes CPU and memory. The update script runs it at the
+**Build load:** building the website takes CPU and memory. The update script runs it in a capped systemd scope (hard RAM limit, CPU cap, lowest I/O weight), so it can only swap out its own memory, never Kavya's. It also runs it at the
 lowest priority (`nice`/`ionice`) with a memory cap, and refuses to start when memory is short.
 Add swap first (step 5.2).
 
@@ -221,7 +221,8 @@ free -h
 ```bash
 cd /tmp
 BASE=https://nodejs.org/dist/latest-v22.x
-TAR=$(curl -fsSL $BASE/SHASUMS256.txt | awk '/linux-x64.tar.xz$/ {print $2}')
+ARCH=$(uname -m | sed 's/aarch64/arm64/; s/x86_64/x64/')       # this server is ARM (Graviton): arm64
+TAR=$(curl -fsSL $BASE/SHASUMS256.txt | awk -v f="linux-$ARCH.tar.xz" '$2 ~ f"$" {print $2}')
 curl -fsSLO "$BASE/$TAR"
 curl -fsSL $BASE/SHASUMS256.txt | grep " $TAR\$" | sha256sum -c -     # must print: OK
 sudo mkdir -p /opt/node22 && sudo tar -xJf "$TAR" -C /opt/node22 --strip-components=1
@@ -453,6 +454,11 @@ sed 's#/usr/bin/node#/opt/node22/bin/node#' deploy/quenchquest-web.service \
   | sudo tee /etc/systemd/system/quenchquest-web.service > /dev/null
 sudo systemctl daemon-reload
 sudo systemctl enable quenchquest-web             # starts with the first deploy
+
+# Memory limit so the website can never take memory from other apps on the server
+sudo mkdir -p /etc/systemd/system/quenchquest-web.service.d
+printf '[Service]\nMemoryHigh=350M\nMemoryMax=500M\n' | sudo tee /etc/systemd/system/quenchquest-web.service.d/memory.conf > /dev/null
+sudo systemctl daemon-reload
 
 sudo cp deploy/deploy-release.sh /usr/local/bin/qq-deploy && sudo chmod +x /usr/local/bin/qq-deploy
 ```

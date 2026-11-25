@@ -31,6 +31,10 @@ Restart=always
 RestartSec=3
 KillMode=mixed
 TimeoutStopSec=20
+# Memory limits: on a shared server the API can never take memory from other apps.
+# Over MemoryHigh it is slowed and reclaimed; at MemoryMax only this service is stopped.
+MemoryHigh=350M
+MemoryMax=500M
 # Hardening
 NoNewPrivileges=true
 PrivateTmp=true
