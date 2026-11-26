@@ -356,7 +356,7 @@ ENGINE=django.db.backends.mysql
 DB_NAME=quenchquest_v2
 DB_USER=qq_app
 DB_PASSWORD=<DBPASS from 7.2>
-DB_HOST=127.0.0.1
+DB_HOST=localhost
 DB_PORT=3306
 
 # From the old .env (and rotate this Gmail app password — the old one was in git history)
@@ -404,6 +404,18 @@ Create the first admin. It asks for the password; nothing is shown or saved in y
 ```bash
 sudo -u qqapi .venv/bin/python manage.py shell -c "import getpass; from authentication.models import SisUser; u = SisUser(username='admin', email='admin@quenchquest.local', choice='admin', is_staff=True, is_superuser=True); u.set_password(getpass.getpass('Password: ')); u.save(); print('Created', u.username)"
 ```
+
+> **Two separate kinds of login.**
+> - The admin panel (`/admin` on the website) signs in **staff accounts**: admins, employees and editors.
+> - Django's built-in admin (`/admin/` on the API) signs in **Django's own user accounts**.
+>
+> `manage.py changepassword` only changes the **Django** accounts. To reset an **admin panel** password on the server, use this instead. It also clears a lock caused by too many wrong passwords:
+>
+> ```bash
+> sudo -u qqapi .venv/bin/python manage.py shell -c "import getpass; from authentication.models import SisUser; u = SisUser.objects.get(username='admin'); u.set_password(getpass.getpass('New password: ')); u.failed_login_attempts = 0; u.locked_until = None; u.save(); print('Password set for', u.username)"
+> ```
+>
+> Staff can also be given new passwords from **Staff → Reset password** inside the panel.
 
 ### 7.5 Service
 
@@ -532,29 +544,50 @@ Logs: `journalctl -u quenchquest-api -f` and `journalctl -u quenchquest-web -f`.
 
 ---
 
-## 12. Later: connect the domain and HTTPS
+## 12. Connect the domain and HTTPS (no downtime)
 
-1. DNS: point `A` records for `quenchquestsocialfoundation.org`, `www` and `api` at `<SERVER-IP>`.
-2. Swap the Nginx config. The two files share upstream names, so only one may be enabled:
+> **The domain is on Cloudflare (proxied, orange cloud).** Use **`deploy/nginx-quenchquest-cloudflare.conf`**
+> instead of the certbot config described below. HTTPS between Cloudflare and the server then uses a
+> free Cloudflare **origin certificate**: no certbot, and no renewals for 15 years.
+> 1. In Cloudflare, open **SSL/TLS → Origin Server → Create Certificate**, for
+>    `quenchquestsocialfoundation.org` and `*.quenchquestsocialfoundation.org`. Save the certificate as
+>    `/etc/ssl/quenchquest/origin.pem` and the key as `/etc/ssl/quenchquest/origin.key` (mode 600).
+> 2. Enable the config next to the IP one, then `nginx -t` and reload. Port 80 and 443 both serve the
+>    site, so it works under "Flexible" and "Full (strict)".
+> 3. In Cloudflare, set **SSL/TLS mode → Full (strict)** and turn on **Always Use HTTPS**, for this domain only.
+> 4. Continue with steps 4–6 below (API `.env`, website rebuild, IP setup off).
+
+The domain config runs **alongside** the IP config, so the IP address keeps working until the
+domain is fully ready.
+
+1. **DNS.** `quenchquestsocialfoundation.org`, `www` and `api` must all point at `<SERVER-IP>`.
+   Check with `getent hosts <name>`. Certbot fails if any of the three points elsewhere.
+2. **Enable the domain config** next to the IP one. It uses its own upstream names, so both can be on:
    ```bash
-   sudo cp /var/www/quenchquest-api/deploy/nginx-quenchquest-domain.conf /etc/nginx/sites-available/quenchquest
+   cd /var/www/quenchquest-api && git pull --ff-only
+   sudo cp deploy/nginx-quenchquest-domain.conf /etc/nginx/sites-available/quenchquest
    sudo ln -s /etc/nginx/sites-available/quenchquest /etc/nginx/sites-enabled/quenchquest
-   sudo rm /etc/nginx/sites-enabled/quenchquest-ip
    sudo nginx -t && sudo systemctl reload nginx
-   sudo certbot --nginx -d quenchquestsocialfoundation.org -d www.quenchquestsocialfoundation.org -d api.quenchquestsocialfoundation.org
    ```
-3. API `.env`:
-   - `ALLOWED_HOSTS=api.quenchquestsocialfoundation.org,127.0.0.1,localhost`
-   - `CSRF_TRUSTED_ORIGINS` and `CORS_ALLOWED_ORIGINS` → `https://www.quenchquestsocialfoundation.org`
+3. **HTTPS.** Certbot edits only the file whose server names match:
+   ```bash
+   sudo certbot --nginx --redirect --cert-name quenchquest -d quenchquestsocialfoundation.org \
+        -d www.quenchquestsocialfoundation.org -d api.quenchquestsocialfoundation.org
+   ```
+4. **API `.env`.** Add the domain to the existing values, and keep the IP entries for now:
+   - `ALLOWED_HOSTS` += `api.quenchquestsocialfoundation.org`
+   - `CSRF_TRUSTED_ORIGINS` and `CORS_ALLOWED_ORIGINS` += `https://www.quenchquestsocialfoundation.org`
    - `MEDIA_URL=https://api.quenchquestsocialfoundation.org/media/`
    - `CERTIFICATE_VERIFY_URL=https://www.quenchquestsocialfoundation.org/verify`
-   - `GOOGLE_CLIENT_ID=<if used>`
 
    Then run `sudo systemctl reload quenchquest-api`.
-4. Website `.env.production`: `NEXT_PUBLIC_API_URL=https://api.quenchquestsocialfoundation.org`,
-   `NEXT_PUBLIC_SITE_URL=https://www.quenchquestsocialfoundation.org`, and the Google client ID.
-   Then run `deploy-web.sh`; `NEXT_PUBLIC_*` values need a new build.
-5. Close ports 8080 and 8081 in the security group, and remove the `quenchquest-ip` file from `sites-available`.
+5. **Rebuild the website.** Set `NEXT_PUBLIC_API_URL=https://api.quenchquestsocialfoundation.org` and
+   `NEXT_PUBLIC_SITE_URL=https://www.quenchquestsocialfoundation.org` in `.env.production`, then run
+   `deploy-web.sh`; `NEXT_PUBLIC_*` values need a new build. `API_URL` stays `http://127.0.0.1:8081`,
+   which the domain config keeps on this machine only.
+6. **Turn the IP setup off.** Remove `sites-enabled/quenchquest-ip`, then `nginx -t` and reload.
+   Remove the IP entries from `ALLOWED_HOSTS`, CSRF and CORS, then reload the API. Close ports 8080
+   and 8081 in the security group.
 
 Certificates already issued keep the **old** IP link in their QR codes. To re-draw them with the
 new link, run `POST /api/admin/projects/{id}/certificates/regenerate/` for each project.
