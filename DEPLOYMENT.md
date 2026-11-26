@@ -546,16 +546,14 @@ Logs: `journalctl -u quenchquest-api -f` and `journalctl -u quenchquest-web -f`.
 
 ## 12. Connect the domain and HTTPS (no downtime)
 
-> **The domain is on Cloudflare (proxied, orange cloud).** Use **`deploy/nginx-quenchquest-cloudflare.conf`**
-> instead of the certbot config described below. HTTPS between Cloudflare and the server then uses a
-> free Cloudflare **origin certificate**: no certbot, and no renewals for 15 years.
-> 1. In Cloudflare, open **SSL/TLS → Origin Server → Create Certificate**, for
->    `quenchquestsocialfoundation.org` and `*.quenchquestsocialfoundation.org`. Save the certificate as
->    `/etc/ssl/quenchquest/origin.pem` and the key as `/etc/ssl/quenchquest/origin.key` (mode 600).
-> 2. Enable the config next to the IP one, then `nginx -t` and reload. Port 80 and 443 both serve the
->    site, so it works under "Flexible" and "Full (strict)".
-> 3. In Cloudflare, set **SSL/TLS mode → Full (strict)** and turn on **Always Use HTTPS**, for this domain only.
-> 4. Continue with steps 4–6 below (API `.env`, website rebuild, IP setup off).
+> **The domain is on Cloudflare (proxied, orange cloud), SSL mode "Flexible".** Cloudflare gives visitors
+> HTTPS and talks to this server over plain HTTP on port 80, so no certificate or certbot is needed.
+> 1. Enable **`deploy/nginx-quenchquest-cloudflare.conf`** next to the IP config, then `nginx -t` and reload.
+>    Use it instead of the certbot config below.
+> 2. Continue with steps 4–6 below (API `.env`, website rebuild, IP setup off).
+>
+> Don't add an http→https redirect on the server: under "Flexible" it loops. Cloudflare's
+> **Always Use HTTPS** handles that redirect.
 
 The domain config runs **alongside** the IP config, so the IP address keeps working until the
 domain is fully ready.
